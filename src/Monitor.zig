@@ -32,6 +32,8 @@ scroll: [config.tags.len + 1]i32 = @splat(0),
 /// Layer surfaces per layer, background to overlay, newest first.
 layers: [4]wl.list.Head(LayerSurface, .link) = undefined,
 lock_surface: ?*lock.LockSurface = null,
+/// Turned off by output power management; stays in the layout.
+asleep: bool = false,
 
 frame: wl.Listener(*wlr.Output) = .init(onFrame),
 destroy: wl.Listener(*wlr.Output) = .init(onDestroy),
@@ -136,10 +138,73 @@ fn close(m: *Monitor) void {
     server.focus(server.focustop(server.selmon), true);
 }
 
+var output_manager: *wlr.OutputManagerV1 = undefined;
+var manager_apply: wl.Listener(*wlr.OutputConfigurationV1) = .init(onManagerApply);
+var manager_test: wl.Listener(*wlr.OutputConfigurationV1) = .init(onManagerTest);
+var power_set_mode: wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode) = .init(onPowerSetMode);
+
+pub fn initManagers() !void {
+    output_manager = try wlr.OutputManagerV1.create(server.wl_server);
+    output_manager.events.apply.add(&manager_apply);
+    output_manager.events.@"test".add(&manager_test);
+    (try wlr.OutputPowerManagerV1.create(server.wl_server)).events.set_mode.add(&power_set_mode);
+}
+
+fn onManagerApply(_: *wl.Listener(*wlr.OutputConfigurationV1), config_: *wlr.OutputConfigurationV1) void {
+    applyConfig(config_, false);
+}
+
+fn onManagerTest(_: *wl.Listener(*wlr.OutputConfigurationV1), config_: *wlr.OutputConfigurationV1) void {
+    applyConfig(config_, true);
+}
+
+fn applyConfig(cfg: *wlr.OutputConfigurationV1, test_only: bool) void {
+    var ok = true;
+    var it = cfg.heads.iterator(.forward);
+    while (it.next()) |head| {
+        const output = head.state.output;
+        const m = fromOutput(output) orelse continue;
+        m.asleep = false;
+        var state = wlr.Output.State.init();
+        defer state.finish();
+        head.state.apply(&state);
+        ok = ok and if (test_only) output.testState(&state) else output.commitState(&state);
+        // Re-adding an output that didn't move would mark it manually placed.
+        if (!test_only and output.enabled and (m.m.x != head.state.x or m.m.y != head.state.y))
+            _ = server.output_layout.add(output, head.state.x, head.state.y) catch {};
+    }
+    if (ok) cfg.sendSucceeded() else cfg.sendFailed();
+    cfg.destroy();
+    updateAll();
+}
+
+fn onPowerSetMode(_: *wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode), event: *wlr.OutputPowerManagerV1.event.SetMode) void {
+    const m = fromOutput(event.output) orelse return;
+    var state = wlr.Output.State.init();
+    defer state.finish();
+    state.setEnabled(event.mode == .on);
+    _ = m.output.commitState(&state);
+    m.asleep = event.mode == .off;
+    updateAll();
+}
+
+/// Tell output management clients how things look now.
+fn publishConfig() void {
+    const cfg = wlr.OutputConfigurationV1.create() catch return;
+    var it = server.monitors.iterator(.forward);
+    while (it.next()) |m| {
+        const head = wlr.OutputConfigurationV1.Head.create(cfg, m.output) catch continue;
+        head.state.enabled = m.output.enabled;
+        head.state.x = m.m.x;
+        head.state.y = m.m.y;
+    }
+    output_manager.setConfiguration(cfg);
+}
+
 pub fn updateAll() void {
     var it = server.monitors.iterator(.forward);
     while (it.next()) |m| {
-        if (m.output.enabled) continue;
+        if (m.output.enabled or m.asleep) continue;
         server.output_layout.remove(m.output);
         m.close();
         m.m = std.mem.zeroes(wlr.Box);
@@ -175,6 +240,7 @@ pub fn updateAll() void {
         while (cit.next()) |cl| if (cl.mon == null and cl.surface().mapped) cl.setMon(sel, cl.tags);
         server.focus(server.focustop(sel), true);
     };
+    publishConfig();
 }
 
 /// Place layer surfaces and shrink the window area by their exclusive zones.

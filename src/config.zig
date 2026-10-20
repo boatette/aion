@@ -20,6 +20,8 @@ const love = 0xeb6f92ff;
 const rose = 0xebbcbaff;
 
 pub const sloppyfocus = true;
+/// Windows asking for attention get focused (switching tag if needed) instead of marked urgent.
+pub const focus_on_activate = true;
 pub const borderpx = 1;
 pub const rootcolor = a.color(base);
 pub const bordercolor = a.color(muted);

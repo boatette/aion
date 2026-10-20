@@ -39,6 +39,23 @@ var request_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(
 var request_start_drag: wl.Listener(*wlr.Seat.event.RequestStartDrag) = .init(onRequestStartDrag);
 var start_drag: wl.Listener(*wlr.Drag) = .init(onStartDrag);
 var drag_icon_destroy: wl.Listener(*wlr.Drag.Icon) = .init(onDragIconDestroy);
+var request_primary_selection: wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection) = .init(onRequestPrimarySelection);
+var request_shape: wl.Listener(*wlr.CursorShapeManagerV1.event.RequestSetShape) = .init(onRequestShape);
+var new_constraint: wl.Listener(*wlr.PointerConstraintV1) = .init(onNewConstraint);
+var swipe_begin: wl.Listener(*wlr.Pointer.event.SwipeBegin) = .init(onSwipeBegin);
+var swipe_update: wl.Listener(*wlr.Pointer.event.SwipeUpdate) = .init(onSwipeUpdate);
+var swipe_end: wl.Listener(*wlr.Pointer.event.SwipeEnd) = .init(onSwipeEnd);
+var pinch_begin: wl.Listener(*wlr.Pointer.event.PinchBegin) = .init(onPinchBegin);
+var pinch_update: wl.Listener(*wlr.Pointer.event.PinchUpdate) = .init(onPinchUpdate);
+var pinch_end: wl.Listener(*wlr.Pointer.event.PinchEnd) = .init(onPinchEnd);
+var hold_begin: wl.Listener(*wlr.Pointer.event.HoldBegin) = .init(onHoldBegin);
+var hold_end: wl.Listener(*wlr.Pointer.event.HoldEnd) = .init(onHoldEnd);
+
+var relative_pointer: *wlr.RelativePointerManagerV1 = undefined;
+var constraints: *wlr.PointerConstraintsV1 = undefined;
+var active_constraint: ?*wlr.PointerConstraintV1 = null;
+var gestures: *wlr.PointerGesturesV1 = undefined;
+
 var new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) = .init(onNewVirtualKeyboard);
 var new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) = .init(onNewVirtualPointer);
 
@@ -53,10 +70,25 @@ pub fn init() !void {
     cursor.events.button.add(&button);
     cursor.events.axis.add(&axis);
     cursor.events.frame.add(&frame);
+    cursor.events.swipe_begin.add(&swipe_begin);
+    cursor.events.swipe_update.add(&swipe_update);
+    cursor.events.swipe_end.add(&swipe_end);
+    cursor.events.pinch_begin.add(&pinch_begin);
+    cursor.events.pinch_update.add(&pinch_update);
+    cursor.events.pinch_end.add(&pinch_end);
+    cursor.events.hold_begin.add(&hold_begin);
+    cursor.events.hold_end.add(&hold_end);
+
+    relative_pointer = try wlr.RelativePointerManagerV1.create(server.wl_server);
+    constraints = try wlr.PointerConstraintsV1.create(server.wl_server);
+    constraints.events.new_constraint.add(&new_constraint);
+    gestures = try wlr.PointerGesturesV1.create(server.wl_server);
+    (try wlr.CursorShapeManagerV1.create(server.wl_server, 1)).events.request_set_shape.add(&request_shape);
 
     server.backend.events.new_input.add(&new_input);
     server.seat.events.request_set_cursor.add(&request_cursor);
     server.seat.events.request_set_selection.add(&request_selection);
+    server.seat.events.request_set_primary_selection.add(&request_primary_selection);
     server.seat.events.request_start_drag.add(&request_start_drag);
     server.seat.events.start_drag.add(&start_drag);
 
@@ -278,12 +310,14 @@ fn onMotionAbsolute(_: *wl.Listener(*wlr.Pointer.event.MotionAbsolute), event: *
 }
 
 /// time == 0 means nothing moved and pointer focus should just be refreshed.
-pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx: f64, dy: f64, dx_unaccel: f64, dy_unaccel: f64) void {
-    _ = dx_unaccel;
-    _ = dy_unaccel;
+pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx_in: f64, dy_in: f64, dx_unaccel: f64, dy_unaccel: f64) void {
     const cursor = server.cursor;
+    var dx = dx_in;
+    var dy = dy_in;
     if (time != 0) {
         lock.activity();
+        relative_pointer.sendRelativeMotion(server.seat, @as(u64, time) * 1000, dx, dy, dx_unaccel, dy_unaccel);
+        if (constrain(&dx, &dy)) return;
         cursor.move(device, dx, dy);
         if (config.sloppyfocus) server.selmon = monAt(cursor.x, cursor.y) orelse server.selmon;
     }
@@ -396,6 +430,104 @@ fn onRequestCursor(_: *wl.Listener(*wlr.Seat.event.RequestSetCursor), event: *wl
     if (cursor_mode != .normal and cursor_mode != .pressed) return;
     if (event.seat_client == server.seat.pointer_state.focused_client)
         server.cursor.setSurface(event.surface, event.hotspot_x, event.hotspot_y);
+}
+
+fn onRequestPrimarySelection(_: *wl.Listener(*wlr.Seat.event.RequestSetPrimarySelection), event: *wlr.Seat.event.RequestSetPrimarySelection) void {
+    server.seat.setPrimarySelection(event.source, event.serial);
+}
+
+fn onRequestShape(_: *wl.Listener(*wlr.CursorShapeManagerV1.event.RequestSetShape), event: *wlr.CursorShapeManagerV1.event.RequestSetShape) void {
+    if (cursor_mode != .normal and cursor_mode != .pressed) return;
+    if (event.seat_client == server.seat.pointer_state.focused_client)
+        server.cursor.setXcursor(xcursor, wlr.CursorShapeManagerV1.shapeName(event.shape));
+}
+
+/// Apply the focused surface's pointer constraint to a motion. Returns true
+/// when the pointer is locked and must not move.
+fn constrain(dx: *f64, dy: *f64) bool {
+    const focused = server.seat.pointer_state.focused_surface;
+    const want = if (focused) |f| constraints.constraintForSurface(f, server.seat) else null;
+    if (want != active_constraint) {
+        if (active_constraint) |old| old.sendDeactivated();
+        active_constraint = want;
+        if (want) |w| w.sendActivated();
+    }
+    const con = active_constraint orelse return false;
+    if (cursor_mode == .move or cursor_mode == .resize) return false;
+    const cl = Client.fromSurface(con.surface) orelse return false;
+    const sx = server.cursor.x - @as(f64, @floatFromInt(cl.geom.x + cl.bw));
+    const sy = server.cursor.y - @as(f64, @floatFromInt(cl.geom.y + cl.bw));
+    var cx: f64 = undefined;
+    var cy: f64 = undefined;
+    if (wlr.region.confine(&con.region, sx, sy, sx + dx.*, sy + dy.*, &cx, &cy)) {
+        dx.* = cx - sx;
+        dy.* = cy - sy;
+    }
+    return con.type == .locked;
+}
+
+const Constraint = struct {
+    destroy: wl.Listener(*wlr.PointerConstraintV1) = .init(onDestroy),
+
+    fn onDestroy(listener: *wl.Listener(*wlr.PointerConstraintV1), con: *wlr.PointerConstraintV1) void {
+        const self: *Constraint = @fieldParentPtr("destroy", listener);
+        if (active_constraint == con) {
+            active_constraint = null;
+            // Put the cursor where the client last asked, for locked pointers.
+            if (con.current.cursor_hint.enabled) if (Client.fromSurface(con.surface)) |cl| {
+                const hx = con.current.cursor_hint.x;
+                const hy = con.current.cursor_hint.y;
+                _ = server.cursor.warp(null, hx + @as(f64, @floatFromInt(cl.geom.x + cl.bw)), hy + @as(f64, @floatFromInt(cl.geom.y + cl.bw)));
+                server.seat.pointerWarp(hx, hy);
+            };
+        }
+        self.destroy.link.remove();
+        gpa.destroy(self);
+    }
+};
+
+fn onNewConstraint(_: *wl.Listener(*wlr.PointerConstraintV1), con: *wlr.PointerConstraintV1) void {
+    const self = gpa.create(Constraint) catch return;
+    self.* = .{};
+    con.events.destroy.add(&self.destroy);
+    motionNotify(0, null, 0, 0, 0, 0);
+}
+
+fn onSwipeBegin(_: *wl.Listener(*wlr.Pointer.event.SwipeBegin), event: *wlr.Pointer.event.SwipeBegin) void {
+    lock.activity();
+    gestures.sendSwipeBegin(server.seat, event.time_msec, event.fingers);
+}
+
+fn onSwipeUpdate(_: *wl.Listener(*wlr.Pointer.event.SwipeUpdate), event: *wlr.Pointer.event.SwipeUpdate) void {
+    lock.activity();
+    gestures.sendSwipeUpdate(server.seat, event.time_msec, event.dx, event.dy);
+}
+
+fn onSwipeEnd(_: *wl.Listener(*wlr.Pointer.event.SwipeEnd), event: *wlr.Pointer.event.SwipeEnd) void {
+    gestures.sendSwipeEnd(server.seat, event.time_msec, event.cancelled);
+}
+
+fn onPinchBegin(_: *wl.Listener(*wlr.Pointer.event.PinchBegin), event: *wlr.Pointer.event.PinchBegin) void {
+    lock.activity();
+    gestures.sendPinchBegin(server.seat, event.time_msec, event.fingers);
+}
+
+fn onPinchUpdate(_: *wl.Listener(*wlr.Pointer.event.PinchUpdate), event: *wlr.Pointer.event.PinchUpdate) void {
+    lock.activity();
+    gestures.sendPinchUpdate(server.seat, event.time_msec, event.dx, event.dy, event.scale, event.rotation);
+}
+
+fn onPinchEnd(_: *wl.Listener(*wlr.Pointer.event.PinchEnd), event: *wlr.Pointer.event.PinchEnd) void {
+    gestures.sendPinchEnd(server.seat, event.time_msec, event.cancelled);
+}
+
+fn onHoldBegin(_: *wl.Listener(*wlr.Pointer.event.HoldBegin), event: *wlr.Pointer.event.HoldBegin) void {
+    lock.activity();
+    gestures.sendHoldBegin(server.seat, event.time_msec, event.fingers);
+}
+
+fn onHoldEnd(_: *wl.Listener(*wlr.Pointer.event.HoldEnd), event: *wlr.Pointer.event.HoldEnd) void {
+    gestures.sendHoldEnd(server.seat, event.time_msec, event.cancelled);
 }
 
 fn onRequestSelection(_: *wl.Listener(*wlr.Seat.event.RequestSetSelection), event: *wlr.Seat.event.RequestSetSelection) void {

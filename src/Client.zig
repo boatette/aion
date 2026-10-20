@@ -19,6 +19,7 @@ link: wl.list.Link = undefined,
 flink: wl.list.Link = undefined,
 owner: Server.Owner = undefined,
 toplevel: *wlr.XdgToplevel,
+decoration: ?*wlr.XdgToplevelDecorationV1 = null,
 scene: *wlr.SceneTree = undefined,
 scene_surface: *wlr.SceneTree = undefined,
 border: [4]*wlr.SceneRect = undefined,
@@ -49,6 +50,8 @@ destroy: wl.Listener(void) = .init(onDestroy),
 set_title: wl.Listener(void) = .init(onSetTitle),
 request_fullscreen: wl.Listener(void) = .init(onRequestFullscreen),
 request_maximize: wl.Listener(void) = .init(onRequestMaximize),
+decoration_mode: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(onDecorationMode),
+decoration_destroy: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(onDecorationDestroy),
 
 pub fn createXdg(_: *wl.Listener(*wlr.XdgToplevel), toplevel: *wlr.XdgToplevel) void {
     const cl = gpa.create(Client) catch return;
@@ -288,6 +291,7 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         const size = scroll.initialSize(cl);
         _ = cl.toplevel.setSize(size[0], size[1]);
         cl.setTiled(size[0] != 0);
+        if (cl.decoration) |d| _ = d.setMode(.server_side);
         return;
     }
     if (cl.mon == null) return;
@@ -362,4 +366,42 @@ fn onRequestMaximize(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("request_maximize", listener);
     // Maximizing means nothing here, but the protocol still wants a configure.
     if (cl.toplevel.base.initialized) _ = cl.toplevel.base.scheduleConfigure();
+}
+
+pub fn createDecoration(_: *wl.Listener(*wlr.XdgToplevelDecorationV1), deco: *wlr.XdgToplevelDecorationV1) void {
+    const cl: *Client = @ptrCast(@alignCast(deco.toplevel.base.data orelse return));
+    cl.decoration = deco;
+    deco.events.request_mode.add(&cl.decoration_mode);
+    deco.events.destroy.add(&cl.decoration_destroy);
+    onDecorationMode(&cl.decoration_mode, deco);
+}
+
+/// Borders are drawn here, so clients never draw their own decorations.
+fn onDecorationMode(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), deco: *wlr.XdgToplevelDecorationV1) void {
+    const cl: *Client = @fieldParentPtr("decoration_mode", listener);
+    if (cl.toplevel.base.initialized) _ = deco.setMode(.server_side);
+}
+
+fn onDecorationDestroy(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), _: *wlr.XdgToplevelDecorationV1) void {
+    const cl: *Client = @fieldParentPtr("decoration_destroy", listener);
+    cl.decoration_mode.link.remove();
+    cl.decoration_destroy.link.remove();
+    cl.decoration = null;
+}
+
+pub fn requestActivate(_: *wl.Listener(*wlr.XdgActivationV1.event.RequestActivate), event: *wlr.XdgActivationV1.event.RequestActivate) void {
+    const cl = fromSurface(event.surface) orelse return;
+    if (cl == server.focustop(server.selmon) or !cl.surface().mapped) return;
+    if (config.focus_on_activate) {
+        const m = cl.mon orelse return;
+        if (!cl.visibleOn(m)) {
+            m.seltags ^= 1;
+            m.tagset[m.seltags] = cl.tags;
+        }
+        @import("actions.zig").focus(cl);
+        m.arrange();
+    } else {
+        cl.urgent = true;
+        cl.setBorderColor(&config.urgentcolor);
+    }
 }

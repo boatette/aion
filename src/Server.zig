@@ -53,6 +53,8 @@ layout_change: wl.Listener(*wlr.OutputLayout) = .init(layoutChange),
 new_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(Client.createXdg),
 new_popup: wl.Listener(*wlr.XdgPopup) = .init(createPopup),
 new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) = .init(LayerSurface.create),
+new_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(Client.createDecoration),
+request_activate: wl.Listener(*wlr.XdgActivationV1.event.RequestActivate) = .init(Client.requestActivate),
 renderer_lost: wl.Listener(void) = .init(rendererLost),
 
 pub fn init(s: *Server) !void {
@@ -94,11 +96,29 @@ pub fn init(s: *Server) !void {
     s.drag_icons = try scene.tree.createSceneTree();
     s.layers.get(.block).node.raiseToTop();
 
-    try renderer.initServer(wl_server);
+    _ = try wlr.Shm.createWithRenderer(wl_server, 2, renderer);
+    if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
+        scene.setLinuxDmabufV1(try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer));
+        // Explicit sync, which NVIDIA needs for tear-free offloaded clients.
+        const drm_fd = renderer.getDrmFd();
+        if (drm_fd >= 0 and renderer.features.timeline and backend.features.timeline)
+            _ = wlr.LinuxDrmSyncobjManagerV1.create(wl_server, 1, drm_fd);
+    }
     _ = try wlr.Subcompositor.create(wl_server);
     _ = try wlr.DataDeviceManager.create(wl_server);
+    _ = try wlr.PrimarySelectionDeviceManagerV1.create(wl_server);
+    _ = try wlr.DataControlManagerV1.create(wl_server);
+    _ = try wlr.ExtDataControlManagerV1.create(wl_server, 1);
     _ = try wlr.ScreencopyManagerV1.create(wl_server);
+    _ = try wlr.ExtImageCopyCaptureManagerV1.create(wl_server, 1);
+    _ = try wlr.ExtOutputImageCaptureSourceManagerV1.create(wl_server, 1);
     _ = try wlr.XdgOutputManagerV1.create(wl_server, output_layout);
+    _ = try wlr.Viewporter.create(wl_server);
+    _ = try wlr.SinglePixelBufferManagerV1.create(wl_server);
+    _ = try wlr.FractionalScaleManagerV1.create(wl_server, 1);
+    _ = try wlr.Presentation.create(wl_server, backend, 2);
+    (try wlr.XdgDecorationManagerV1.create(wl_server)).events.new_toplevel_decoration.add(&s.new_decoration);
+    (try wlr.XdgActivationV1.create(wl_server)).events.request_activate.add(&s.request_activate);
 
     backend.events.new_output.add(&s.new_output);
     output_layout.events.change.add(&s.layout_change);
@@ -107,6 +127,7 @@ pub fn init(s: *Server) !void {
     s.layer_shell.events.new_surface.add(&s.new_layer_surface);
     renderer.events.lost.add(&s.renderer_lost);
 
+    try Monitor.initManagers();
     try input.init();
     try @import("lock.zig").init();
 }
