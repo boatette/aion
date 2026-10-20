@@ -1,0 +1,280 @@
+const Server = @This();
+
+const std = @import("std");
+const log = std.log;
+const wl = @import("wayland").server.wl;
+const wlr = @import("wlroots");
+const c = @import("c");
+
+const config = @import("config.zig");
+const actions = @import("actions.zig");
+const input = @import("input.zig");
+const Client = @import("Client.zig");
+const Monitor = @import("Monitor.zig");
+
+pub const Layer = enum { bg, bottom, tile, float, top, fs, overlay, block };
+
+const gpa = std.heap.c_allocator;
+
+wl_server: *wl.Server,
+backend: *wlr.Backend,
+session: ?*wlr.Session,
+renderer: *wlr.Renderer,
+allocator: *wlr.Allocator,
+compositor: *wlr.Compositor,
+scene: *wlr.Scene,
+scene_layout: *wlr.SceneOutputLayout,
+output_layout: *wlr.OutputLayout,
+layers: std.EnumArray(Layer, *wlr.SceneTree),
+drag_icons: *wlr.SceneTree,
+root_bg: *wlr.SceneRect,
+xdg_shell: *wlr.XdgShell,
+seat: *wlr.Seat,
+cursor: *wlr.Cursor,
+
+monitors: wl.list.Head(Monitor, .link),
+clients: wl.list.Head(Client, .link),
+fstack: wl.list.Head(Client, .flink),
+selmon: ?*Monitor = null,
+socket: [11]u8 = undefined,
+
+new_output: wl.Listener(*wlr.Output) = .init(Monitor.create),
+layout_change: wl.Listener(*wlr.OutputLayout) = .init(layoutChange),
+new_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(Client.createXdg),
+new_popup: wl.Listener(*wlr.XdgPopup) = .init(createPopup),
+renderer_lost: wl.Listener(void) = .init(rendererLost),
+
+pub fn init(s: *Server) !void {
+    const wl_server = try wl.Server.create();
+    const loop = wl_server.getEventLoop();
+
+    var session: ?*wlr.Session = null;
+    const backend = try wlr.Backend.autocreate(loop, &session);
+    const renderer = try wlr.Renderer.autocreate(backend);
+    const scene = try wlr.Scene.create();
+    const output_layout = try wlr.OutputLayout.create(wl_server);
+
+    s.* = .{
+        .wl_server = wl_server,
+        .backend = backend,
+        .session = session,
+        .renderer = renderer,
+        .allocator = try wlr.Allocator.autocreate(backend, renderer),
+        .compositor = try wlr.Compositor.create(wl_server, 6, renderer),
+        .scene = scene,
+        .scene_layout = try scene.attachOutputLayout(output_layout),
+        .output_layout = output_layout,
+        .layers = undefined,
+        .drag_icons = undefined,
+        .root_bg = try scene.tree.createSceneRect(0, 0, &config.rootcolor),
+        .xdg_shell = try wlr.XdgShell.create(wl_server, 6),
+        .seat = try wlr.Seat.create(wl_server, "seat0"),
+        .cursor = try wlr.Cursor.create(),
+        .monitors = undefined,
+        .clients = undefined,
+        .fstack = undefined,
+    };
+    s.monitors.init();
+    s.clients.init();
+    s.fstack.init();
+
+    for (&s.layers.values) |*tree| tree.* = try scene.tree.createSceneTree();
+    s.drag_icons = try scene.tree.createSceneTree();
+    s.layers.get(.block).node.raiseToTop();
+
+    try renderer.initServer(wl_server);
+    _ = try wlr.Subcompositor.create(wl_server);
+    _ = try wlr.DataDeviceManager.create(wl_server);
+    _ = try wlr.ScreencopyManagerV1.create(wl_server);
+    _ = try wlr.XdgOutputManagerV1.create(wl_server, output_layout);
+
+    backend.events.new_output.add(&s.new_output);
+    output_layout.events.change.add(&s.layout_change);
+    s.xdg_shell.events.new_toplevel.add(&s.new_toplevel);
+    s.xdg_shell.events.new_popup.add(&s.new_popup);
+    renderer.events.lost.add(&s.renderer_lost);
+
+    try input.init();
+}
+
+pub fn start(s: *Server, startup: ?[*:0]const u8) !void {
+    const socket = try s.wl_server.addSocketAuto(&s.socket);
+    try s.backend.start();
+    _ = c.setenv("WAYLAND_DISPLAY", socket.ptr, 1);
+
+    // Startup commands run with the session environment the compositor sees.
+    if (startup) |cmd| {
+        const argv = [_:null]?[*:0]const u8{ "/bin/sh", "-c", cmd };
+        actions.spawnArgv(&argv);
+    }
+
+    // The backend picked the cursor position while outputs were added; put it somewhere sane.
+    if (s.selmon) |m| s.cursor.warpClosest(null, @floatFromInt(m.m.x + @divTrunc(m.m.width, 2)), @floatFromInt(m.m.y + @divTrunc(m.m.height, 2)));
+    input.updateCursor();
+}
+
+pub fn deinit(s: *Server) void {
+    s.wl_server.destroyClients();
+    s.backend.destroy();
+    s.wl_server.destroy();
+}
+
+pub fn focustop(s: *Server, m: ?*Monitor) ?*Client {
+    var it = s.fstack.iterator(.forward);
+    while (it.next()) |cl| if (cl.visibleOn(m)) return cl;
+    return null;
+}
+
+pub fn focus(s: *Server, cl: ?*Client, lift: bool) void {
+    const old = s.seat.keyboard_state.focused_surface;
+    if (input.locked) return;
+
+    if (cl) |new| {
+        if (lift) new.scene.node.raiseToTop();
+        if (new.surface() == old) return;
+        new.flink.remove();
+        s.fstack.prepend(new);
+        s.selmon = new.mon;
+        new.urgent = false;
+        new.setBorderColor(&config.focuscolor);
+    }
+
+    if (old) |o| {
+        if (Client.fromSurface(o)) |prev| {
+            if (cl != prev) {
+                prev.activate(false);
+                prev.setBorderColor(&config.bordercolor);
+            }
+        }
+    }
+
+    const new = cl orelse {
+        s.seat.keyboardNotifyClearFocus();
+        return;
+    };
+    input.motionNotify(0, null, 0, 0, 0, 0);
+    input.keyboardEnter(new.surface());
+    new.activate(true);
+}
+
+pub const Hit = struct {
+    surface: ?*wlr.Surface = null,
+    client: ?*Client = null,
+    sx: f64 = 0,
+    sy: f64 = 0,
+};
+
+/// Find what is under a layout coordinate, walking layers top to bottom.
+pub fn hitTest(s: *Server, x: f64, y: f64) Hit {
+    var hit: Hit = .{};
+    const order = [_]Layer{ .block, .overlay, .fs, .top, .float, .tile, .bottom, .bg };
+    for (order) |layer| {
+        var sx: f64 = undefined;
+        var sy: f64 = undefined;
+        const node = s.layers.get(layer).node.at(x, y, &sx, &sy) orelse continue;
+        if (node.type == .buffer) {
+            if (wlr.SceneSurface.tryFromBuffer(wlr.SceneBuffer.fromNode(node))) |ss| {
+                hit.surface = ss.surface;
+                hit.sx = sx;
+                hit.sy = sy;
+            }
+        }
+        // Walk up to the tree that owns this node to find its client.
+        var n: ?*wlr.SceneNode = node;
+        while (n) |cur| : (n = if (cur.parent) |p| &p.node else null) {
+            if (cur.data) |data| {
+                hit.client = @ptrCast(@alignCast(data));
+                break;
+            }
+        }
+        break;
+    }
+    return hit;
+}
+
+pub fn dirtomon(s: *Server, dir: wlr.OutputLayout.Direction) ?*Monitor {
+    const m = s.selmon orelse return null;
+    const cx: f64 = @floatFromInt(m.m.x + @divTrunc(m.m.width, 2));
+    const cy: f64 = @floatFromInt(m.m.y + @divTrunc(m.m.height, 2));
+    if (s.output_layout.adjacentOutput(dir, m.output, cx, cy)) |next| return @ptrCast(@alignCast(next.data));
+    if (s.output_layout.farthestOutput(@enumFromInt(@intFromEnum(opposite(dir))), m.output, cx, cy)) |next| return @ptrCast(@alignCast(next.data));
+    return m;
+}
+
+fn opposite(dir: wlr.OutputLayout.Direction) wlr.OutputLayout.Direction {
+    return switch (dir) {
+        .up => .down,
+        .down => .up,
+        .left => .right,
+        .right => .left,
+    };
+}
+
+pub fn arrangeAll(s: *Server) void {
+    var it = s.monitors.iterator(.forward);
+    while (it.next()) |m| m.arrange();
+}
+
+fn layoutChange(_: *wl.Listener(*wlr.OutputLayout), _: *wlr.OutputLayout) void {
+    Monitor.updateAll();
+}
+
+fn createPopup(_: *wl.Listener(*wlr.XdgPopup), popup: *wlr.XdgPopup) void {
+    const p = gpa.create(Popup) catch return;
+    p.* = .{ .popup = popup };
+    popup.base.surface.events.commit.add(&p.commit);
+    popup.events.destroy.add(&p.destroy);
+}
+
+const Popup = struct {
+    popup: *wlr.XdgPopup,
+    commit: wl.Listener(*wlr.Surface) = .init(onCommit),
+    destroy: wl.Listener(void) = .init(onDestroy),
+
+    fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
+        const p: *Popup = @fieldParentPtr("commit", listener);
+        if (!p.popup.base.initial_commit) return;
+        const server = &@import("main.zig").server;
+        const parent = p.popup.parent orelse return;
+        // Toplevels and popups store their scene tree in surface.data.
+        const parent_tree: *wlr.SceneTree = @ptrCast(@alignCast(parent.data orelse return));
+        const tree = parent_tree.createSceneXdgSurface(p.popup.base) catch return;
+        p.popup.base.surface.data = tree;
+
+        // Keep popups on the monitor their toplevel is on.
+        var root = parent;
+        var box: wlr.Box = undefined;
+        while (wlr.XdgSurface.tryFromWlrSurface(root)) |xs| {
+            if (xs.role == .popup) root = xs.role_data.popup.?.parent orelse break else break;
+        }
+        const cl = Client.fromSurface(root) orelse return;
+        const m = cl.mon orelse server.selmon orelse return;
+        box = m.m;
+        box.x -= cl.geom.x;
+        box.y -= cl.geom.y;
+        p.popup.unconstrainFromBox(&box);
+    }
+
+    fn onDestroy(listener: *wl.Listener(void)) void {
+        const p: *Popup = @fieldParentPtr("destroy", listener);
+        p.commit.link.remove();
+        p.destroy.link.remove();
+        gpa.destroy(p);
+    }
+};
+
+fn rendererLost(_: *wl.Listener(void)) void {
+    const server = &@import("main.zig").server;
+    log.info("renderer lost, recreating it", .{});
+    const old_renderer = server.renderer;
+    const old_allocator = server.allocator;
+    server.renderer = wlr.Renderer.autocreate(server.backend) catch @panic("could not recreate renderer");
+    server.allocator = wlr.Allocator.autocreate(server.backend, server.renderer) catch @panic("could not recreate allocator");
+    server.renderer_lost.link.remove();
+    server.renderer.events.lost.add(&server.renderer_lost);
+    server.compositor.setRenderer(server.renderer);
+    var it = server.monitors.iterator(.forward);
+    while (it.next()) |m| _ = m.output.initRender(server.allocator, server.renderer);
+    old_allocator.destroy();
+    old_renderer.destroy();
+}
