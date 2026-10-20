@@ -281,7 +281,12 @@ const Keyboard = struct {
 
 fn onNewInput(_: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
     switch (device.type) {
-        .keyboard => _ = group.addKeyboard(device.toKeyboard()),
+        .keyboard => {
+            // The group only takes keyboards whose keymap matches its own.
+            const kb = device.toKeyboard();
+            setKeymap(kb) catch return;
+            _ = group.addKeyboard(kb);
+        },
         .pointer => {
             configurePointer(device);
             server.cursor.attachInputDevice(device);
