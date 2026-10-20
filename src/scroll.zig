@@ -96,7 +96,9 @@ pub fn arrange(m: *Monitor) void {
     }
 
     const s = &m.scroll[slot(m)];
-    s.* = std.math.clamp(s.*, 0, @max(0, total - m.w.width));
+    // A strip narrower than the monitor may sit anywhere on it, so it can be centered.
+    const slack = total - m.w.width;
+    s.* = std.math.clamp(s.*, @min(0, slack), @max(0, slack));
 
     var focused: u32 = 0;
     const sel = server.focustop(m);
