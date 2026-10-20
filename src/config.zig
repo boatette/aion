@@ -3,6 +3,7 @@ const xkb = @import("xkbcommon");
 const c = @import("c");
 const a = @import("actions.zig");
 const scroll = @import("scroll.zig");
+const menu = @import("menu.zig");
 
 const K = xkb.Keysym;
 const MOD = a.LOGO;
@@ -35,6 +36,21 @@ pub const bar_norm: a.Scheme = .{ .fg = subtle, .bg = base };
 pub const bar_sel: a.Scheme = .{ .fg = text, .bg = overlay };
 /// Prints one status line at a time; null reads the status from stdin.
 pub const status_cmd: ?a.Arg = null;
+
+/// Mod+d launcher: apps_cmd lists "Name<TAB>path" lines, launch_cmd plus the path starts one.
+pub const apps_cmd = a.cmd(&.{"dwl-apps"});
+pub const launch_cmd = [_][:0]const u8{ "dwl-apps", "launch" };
+
+/// Mod+x, then one key: session actions. Any other key leaves the mode.
+const power = "dwl-power";
+pub const session_keys = [_]a.Key{
+    .{ .mod = 0, .sym = K.l, .func = a.spawn, .arg = a.cmd(&.{ power, "lock" }) },
+    .{ .mod = 0, .sym = K.u, .func = a.spawn, .arg = a.cmd(&.{ power, "suspend" }) },
+    .{ .mod = 0, .sym = K.e, .func = a.spawn, .arg = a.cmd(&.{ power, "logout" }) },
+    .{ .mod = 0, .sym = K.r, .func = a.spawn, .arg = a.cmd(&.{ power, "reboot" }) },
+    .{ .mod = 0, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ power, "shutdown" }) },
+};
+pub const session_hint = "l lock  u suspend  e logout  r reboot  s shutdown";
 
 pub const default_width: f32 = 0.5;
 pub const width_presets = [_]f32{ 1.0 / 3.0, 0.5, 2.0 / 3.0 };
@@ -117,6 +133,10 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD, .sym = K.e, .func = a.spawn, .arg = a.cmd(&.{"dolphin"}) },
     .{ .mod = MOD | ALT, .sym = K.e, .func = a.spawn, .arg = a.cmd(&.{ "foot", "zsh", "-ic", "y; exec zsh" }) },
     .{ .mod = CTRL | SHIFT, .sym = K.Escape, .func = a.spawn, .arg = a.cmd(&.{ "foot", "-e", "btop" }) },
+    .{ .mod = MOD, .sym = K.d, .func = menu.launcher },
+    .{ .mod = MOD | SHIFT, .sym = K.d, .func = a.spawn, .arg = a.cmd(&.{"tofi-drun"}) },
+    .{ .mod = MOD, .sym = K.x, .func = menu.session },
+    .{ .mod = MOD | SHIFT, .sym = K.x, .func = a.spawn, .arg = a.cmd(&.{power}) },
     .{ .mod = ALT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = 1 } },
     .{ .mod = ALT | SHIFT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = -1 } },
 

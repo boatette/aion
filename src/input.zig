@@ -12,6 +12,7 @@ const Client = @import("Client.zig");
 const Monitor = @import("Monitor.zig");
 const lock = @import("lock.zig");
 const Bar = @import("Bar.zig");
+const menu = @import("menu.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -172,6 +173,8 @@ const Keyboard = struct {
     kb: *wlr.Keyboard,
     syms: [2]xkb.Keysym = .{ .NoSymbol, .NoSymbol },
     mods: u32 = 0,
+    /// The key a bar mode got, so holding it repeats there instead.
+    menu_sym: ?xkb.Keysym = null,
     repeat_source: *wl.EventSource,
     key: wl.Listener(*wlr.Keyboard.event.Key) = .init(onKey),
     modifiers: wl.Listener(*wlr.Keyboard) = .init(onModifiers),
@@ -219,6 +222,16 @@ const Keyboard = struct {
         k.mods = @bitCast(k.kb.getModifiers());
         lock.activity();
 
+        k.menu_sym = null;
+        if (event.state == .pressed and !locked and menu.active()) {
+            const sym = k.kb.xkb_state.?.keyGetOneSym(keycode);
+            k.menu_sym = sym;
+            consumed.set(event.keycode);
+            menu.key(k.mods, sym);
+            k.repeat_source.timerUpdate(@max(k.kb.repeat_info.delay, 0)) catch {};
+            return;
+        }
+
         var handled = false;
         if (event.state == .pressed) {
             if (k.binding()) |key| {
@@ -246,7 +259,9 @@ const Keyboard = struct {
 
     fn repeat(k: *Keyboard) c_int {
         if (k.kb.repeat_info.rate > 0) k.repeat_source.timerUpdate(@divTrunc(1000, k.kb.repeat_info.rate)) catch {};
-        if (k.binding()) |key| key.func(&key.arg);
+        if (k.menu_sym) |sym| {
+            if (menu.active()) menu.key(k.mods, sym);
+        } else if (k.binding()) |key| key.func(&key.arg);
         return 0;
     }
 };
