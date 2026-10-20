@@ -378,7 +378,8 @@ pub fn stopStatus() void {
     if (status_source) |s| s.remove();
     status_source = null;
     if (status_pid > 0) {
-        _ = c.kill(status_pid, c.SIGTERM);
+        // The whole group, so a sleeping status loop goes too.
+        _ = c.kill(-status_pid, c.SIGTERM);
         _ = c.waitpid(status_pid, null, 0);
         status_pid = 0;
     }

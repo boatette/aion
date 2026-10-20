@@ -393,7 +393,7 @@ fn applyRules(cl: *Client) void {
             };
         }
     }
-    cl.setMon(m, newtags);
+    cl.setMon(m, newtags & @import("actions.zig").tagmask());
 }
 
 fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {

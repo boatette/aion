@@ -31,11 +31,11 @@ pub const urgentcolor = a.color(love);
 pub const fullscreen_bg = a.color(0x000000ff);
 
 pub const showbar = true;
-pub const fonts = [_][*:0]const u8{"monospace:size=12"};
+pub const fonts = [_][*:0]const u8{ "JetBrainsMono Nerd Font:size=12", "monospace:size=12" };
 pub const bar_norm: a.Scheme = .{ .fg = subtle, .bg = base };
 pub const bar_sel: a.Scheme = .{ .fg = text, .bg = overlay };
 /// Prints one status line at a time; null reads the status from stdin.
-pub const status_cmd: ?a.Arg = null;
+pub const status_cmd: ?a.Arg = a.cmd(&.{"dwl-status"});
 
 /// Mod+d launcher: apps_cmd lists "Name<TAB>path" lines, launch_cmd plus the path starts one.
 pub const apps_cmd = a.cmd(&.{"dwl-apps"});
@@ -123,6 +123,10 @@ fn both(comptime mod: u32, comptime vim: xkb.Keysym, comptime arrow: xkb.Keysym,
     };
 }
 
+fn helper(comptime mod: u32, comptime sym: xkb.Keysym, comptime argv: []const [:0]const u8) a.Key {
+    return .{ .mod = mod, .sym = sym, .func = a.spawn, .arg = a.cmd(argv), .locked = true };
+}
+
 fn chvt(comptime n: u32) a.Key {
     return .{ .mod = CTRL | ALT, .sym = @enumFromInt(@intFromEnum(K.F1) + n - 1), .func = a.chvt, .arg = .{ .ui = n }, .locked = true };
 }
@@ -137,6 +141,7 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD | SHIFT, .sym = K.d, .func = a.spawn, .arg = a.cmd(&.{"tofi-drun"}) },
     .{ .mod = MOD, .sym = K.x, .func = menu.session },
     .{ .mod = MOD | SHIFT, .sym = K.x, .func = a.spawn, .arg = a.cmd(&.{power}) },
+    .{ .mod = MOD, .sym = K.i, .func = a.spawn, .arg = a.cmd(&.{"dwl-caffeine"}) },
     .{ .mod = ALT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = 1 } },
     .{ .mod = ALT | SHIFT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = -1 } },
 
@@ -170,11 +175,25 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD | CTRL, .sym = K.o, .func = a.setlayout, .arg = .{ .v = &layouts[0] } },
 
     .{ .mod = MOD, .sym = K.Tab, .func = a.view, .arg = .{ .ui = 0 } },
+
+    // These also work while locked.
+    helper(0, K.XF86AudioRaiseVolume, &.{ "dwl-volume", "up" }),
+    helper(0, K.XF86AudioLowerVolume, &.{ "dwl-volume", "down" }),
+    helper(0, K.XF86AudioMute, &.{ "dwl-volume", "mute" }),
+    helper(0, K.XF86AudioMicMute, &.{ "dwl-volume", "mic-mute" }),
+    helper(0, K.XF86MonBrightnessUp, &.{ "dwl-brightness", "up" }),
+    helper(0, K.XF86MonBrightnessDown, &.{ "dwl-brightness", "down" }),
+    helper(ALT, K.XF86MonBrightnessUp, &.{ "dwl-brightness", "up", "1" }),
+    helper(ALT, K.XF86MonBrightnessDown, &.{ "dwl-brightness", "down", "1" }),
+
+    .{ .mod = 0, .sym = K.Print, .func = a.spawn, .arg = a.cmd(&.{ "dwl-screenshot", "full" }) },
+    .{ .mod = MOD | SHIFT, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ "dwl-screenshot", "region" }) },
+
     .{ .mod = CTRL | ALT, .sym = K.BackSpace, .func = a.quit },
-} ++ both(MOD, K.h, K.Left, a.focusdir, .{ .ui = 0 }) ++
-    both(MOD, K.l, K.Right, a.focusdir, .{ .ui = 1 }) ++
-    both(MOD, K.k, K.Up, a.focusdir, .{ .ui = 2 }) ++
-    both(MOD, K.j, K.Down, a.focusdir, .{ .ui = 3 }) ++
+} ++ both(MOD, K.h, K.Left, a.focusdir, .{ .ui = @intFromEnum(a.Dir.left) }) ++
+    both(MOD, K.l, K.Right, a.focusdir, .{ .ui = @intFromEnum(a.Dir.right) }) ++
+    both(MOD, K.k, K.Up, a.focusdir, .{ .ui = @intFromEnum(a.Dir.up) }) ++
+    both(MOD, K.j, K.Down, a.focusdir, .{ .ui = @intFromEnum(a.Dir.down) }) ++
     both(MOD | SHIFT, K.h, K.Left, a.movecolumn, .{ .i = -1 }) ++
     both(MOD | SHIFT, K.l, K.Right, a.movecolumn, .{ .i = 1 }) ++
     both(MOD | SHIFT, K.k, K.Up, a.movewindow, .{ .i = -1 }) ++
