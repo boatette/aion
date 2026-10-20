@@ -364,36 +364,43 @@ pub fn setMon(cl: *Client, m: ?*Monitor, newtags: u32) void {
     server.focus(server.focustop(server.selmon), true);
 }
 
-fn matches(cl: *const Client, r: anytype) bool {
-    if (r.title) |t| if (std.mem.indexOf(u8, cl.title(), t) == null) return false;
-    if (r.app_id) |id| if (std.mem.indexOf(u8, cl.appId(), id) == null) return false;
-    return true;
-}
+const Matched = struct {
+    floating: ?bool = null,
+    fullscreen: bool = false,
+    width: ?f32 = null,
+    tags: u32 = 0,
+    monitor: i32 = -1,
+};
 
-pub fn ruleFloating(cl: *const Client) bool {
-    var floating = false;
-    for (config.rules) |r| if (matches(cl, r)) {
-        floating = r.floating;
-    };
-    return floating;
+/// Every matching rule applies, later ones winning.
+pub fn matchRules(cl: *const Client) Matched {
+    var res: Matched = .{};
+    for (config.rules) |r| {
+        if (r.title) |t| if (std.mem.indexOf(u8, cl.title(), t) == null) continue;
+        if (r.app_id) |id| if (std.mem.indexOf(u8, cl.appId(), id) == null) continue;
+        if (r.floating) |f| res.floating = f;
+        if (r.width) |w| res.width = w;
+        res.fullscreen = res.fullscreen or r.fullscreen;
+        res.tags |= r.tags;
+        if (r.monitor >= 0) res.monitor = r.monitor;
+    }
+    return res;
 }
 
 fn applyRules(cl: *Client) void {
+    const r = cl.matchRules();
+    if (r.floating) |f| cl.floating = f;
+    if (r.width) |w| cl.width = w;
+    if (r.fullscreen) cl.fullscreen = true;
     var m = server.selmon;
-    var newtags: u32 = 0;
-    for (config.rules) |r| {
-        if (!matches(cl, r)) continue;
-        cl.floating = r.floating;
-        newtags |= r.tags;
-        if (r.monitor >= 0) {
-            var i: i32 = 0;
-            var it = server.monitors.iterator(.forward);
-            while (it.next()) |mon| : (i += 1) if (i == r.monitor) {
-                m = mon;
-            };
-        }
+    if (r.monitor >= 0) {
+        var i: i32 = 0;
+        var it = server.monitors.iterator(.forward);
+        while (it.next()) |mon| : (i += 1) if (i == r.monitor) {
+            m = mon;
+        };
     }
-    cl.setMon(m, newtags & @import("actions.zig").tagmask());
+    cl.setMon(m, r.tags & @import("actions.zig").tagmask());
 }
 
 fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
@@ -403,6 +410,7 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         _ = t.setWmCapabilities(.{ .fullscreen = true });
         // Tiled windows get their column size in the first configure, so they
         // don't draw once at a size they never keep.
+        if (cl.matchRules().width) |w| cl.width = w;
         const size = scroll.initialSize(cl);
         _ = t.setSize(size[0], size[1]);
         cl.setTiled(size[0] != 0);

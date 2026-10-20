@@ -69,7 +69,10 @@ pub const Rule = struct {
     app_id: ?[]const u8 = null,
     title: ?[]const u8 = null,
     tags: u32 = 0,
-    floating: bool = false,
+    floating: ?bool = null,
+    fullscreen: bool = false,
+    /// Column width, as a fraction of the monitor.
+    width: ?f32 = null,
     monitor: i32 = -1,
 };
 
