@@ -643,7 +643,7 @@ fn onSwipeBegin(_: *wl.Listener(*wlr.Pointer.event.SwipeBegin), event: *wlr.Poin
     swipe = .{ .fingers = event.fingers, .mon = monAt(server.cursor.x, server.cursor.y) orelse server.selmon };
 }
 
-/// Horizontal swipes with scroll_fingers move the strip with the fingers.
+/// Swipes with scroll_fingers move the strip, or the tags, with the fingers.
 /// Other swipes run their gesture once per swipe_threshold travelled.
 fn onSwipeUpdate(_: *wl.Listener(*wlr.Pointer.event.SwipeUpdate), event: *wlr.Pointer.event.SwipeUpdate) void {
     lock.activity();
@@ -655,8 +655,12 @@ fn onSwipeUpdate(_: *wl.Listener(*wlr.Pointer.event.SwipeUpdate), event: *wlr.Po
         sw.axis = if (@abs(sw.dx) > @abs(sw.dy)) .horizontal else .vertical;
     }
 
-    if (sw.axis == .horizontal and sw.fingers == config.scroll_fingers) {
-        if (sw.mon) |m| scroll.scrollBy(m, -event.dx * config.swipe_speed);
+    if (sw.fingers == config.scroll_fingers) {
+        const m = sw.mon orelse return;
+        if (sw.axis == .horizontal)
+            scroll.scrollBy(m, -event.dx * config.swipe_speed)
+        else
+            scroll.swipeTags(m, -event.dy * config.swipe_speed);
         return;
     }
 
@@ -673,7 +677,11 @@ fn onSwipeUpdate(_: *wl.Listener(*wlr.Pointer.event.SwipeUpdate), event: *wlr.Po
 fn onSwipeEnd(_: *wl.Listener(*wlr.Pointer.event.SwipeEnd), event: *wlr.Pointer.event.SwipeEnd) void {
     const sw = swipe orelse return gestures.sendSwipeEnd(server.seat, event.time_msec, event.cancelled);
     swipe = null;
-    if (sw.axis == .horizontal and sw.fingers == config.scroll_fingers) if (sw.mon) |m| scroll.snap(m);
+    if (sw.fingers == config.scroll_fingers) if (sw.mon) |m| switch (sw.axis) {
+        .horizontal => scroll.snap(m),
+        .vertical => scroll.snapTags(m),
+        .none => {},
+    };
 }
 
 fn onPinchBegin(_: *wl.Listener(*wlr.Pointer.event.PinchBegin), event: *wlr.Pointer.event.PinchBegin) void {

@@ -30,6 +30,11 @@ sellt: u1 = 0,
 ltsymbol: [16:0]u8 = @splat(0),
 /// Horizontal scroll of the strip, per tag plus one for multi-tag views.
 scroll: [config.tags.len + 1]i32 = @splat(0),
+/// A tag swipe in progress: the view is pushed up by offset pixels (down
+/// when negative), and the tags it is heading for follow it in.
+swipe: ?struct { tags: u32, offset: i32 } = null,
+/// How far down the layout being arranged is drawn.
+shift: i32 = 0,
 /// Layer surfaces per layer, background to overlay, newest first.
 layers: [4]wl.list.Head(LayerSurface, .link) = undefined,
 lock_surface: ?*lock.LockSurface = null,
@@ -303,17 +308,18 @@ pub fn layout(m: *const Monitor) *const actions.Layout {
 
 pub fn arrange(m: *Monitor) void {
     if (!m.output.enabled) return;
+    const incoming: u32 = if (m.swipe) |s| s.tags else 0;
 
     var it = server.clients.iterator(.forward);
     while (it.next()) |cl| {
         if (cl.mon != m) continue;
-        const visible = cl.visibleOn(m);
+        const visible = cl.tags & (m.tags() | incoming) != 0;
         cl.scene.node.setEnabled(visible);
         cl.setSuspended(!visible);
     }
 
     const top = server.focustop(m);
-    m.fullscreen_bg.node.setEnabled(top != null and top.?.fullscreen);
+    m.fullscreen_bg.node.setEnabled(m.swipe == null and top != null and top.?.fullscreen);
 
     const lt = m.layout();
     m.setSymbol(lt.symbol);
@@ -326,9 +332,28 @@ pub fn arrange(m: *Monitor) void {
         cl.scene.node.reparent(server.layers.get(if (cl.floating and lt.arrange != null) .float else .tile));
     }
 
-    if (lt.arrange) |f| f(m);
+    // The incoming tags go first, so windows shared with the current view end up in it.
+    if (m.swipe) |s| {
+        const cur = m.tags();
+        m.tagset[m.seltags] = s.tags;
+        m.arrangeShifted(lt, if (s.offset > 0) m.w.height - s.offset else -m.w.height - s.offset);
+        m.tagset[m.seltags] = cur;
+    }
+    m.arrangeShifted(lt, if (m.swipe) |s| -s.offset else 0);
     input.motionNotify(0, null, 0, 0, 0, 0);
     lock.checkInhibitors(null);
+}
+
+fn arrangeShifted(m: *Monitor, lt: *const actions.Layout, shift: i32) void {
+    m.shift = shift;
+    defer m.shift = 0;
+    if (lt.arrange) |f| f(m);
+    // Layouts only place tiled windows; move the rest along with them.
+    var it = server.clients.iterator(.forward);
+    while (it.next()) |cl| {
+        if (!cl.visibleOn(m) or (cl.tiled() and lt.arrange != null)) continue;
+        cl.scene.node.setPosition(cl.geom.x, cl.geom.y + shift);
+    }
 }
 
 pub fn setSymbol(m: *Monitor, s: []const u8) void {

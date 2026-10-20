@@ -3,6 +3,7 @@ const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 
 const config = @import("config.zig");
+const actions = @import("actions.zig");
 const server = &@import("main.zig").server;
 const Client = @import("Client.zig");
 const Monitor = @import("Monitor.zig");
@@ -116,13 +117,13 @@ pub fn arrange(m: *Monitor) void {
             if (cl == col.last) break;
         }
 
-        var y = m.w.y;
+        var y = m.w.y + m.shift;
         link = &col.first.link;
         while (true) : (link = link.next.?) {
             const cl: *Client = @fieldParentPtr("link", link);
             if (tiledOn(cl, m)) {
                 const h = if (cl == col.last)
-                    m.w.y + m.w.height - y
+                    m.w.y + m.shift + m.w.height - y
                 else
                     @as(i32, @intFromFloat(@round(@as(f32, @floatFromInt(m.w.height)) * cl.weight / weights)));
                 cl.resize(.{ .x = left, .y = y, .width = col.w, .height = h }, false);
@@ -145,11 +146,13 @@ pub fn arrange(m: *Monitor) void {
 }
 
 pub fn monocle(m: *Monitor) void {
+    var area = m.w;
+    area.y += m.shift;
     var n: u32 = 0;
     var it = server.clients.iterator(.forward);
     while (it.next()) |cl| {
         if (!tiledOn(cl, m)) continue;
-        cl.resize(m.w, false);
+        cl.resize(area, false);
         n += 1;
     }
     var buf: [16]u8 = undefined;
@@ -457,4 +460,36 @@ pub fn snap(m: *Monitor) void {
     // A strip that fits shows every column anyway; keep it where it was.
     s.* = if (it.x <= m.w.width) d.start else aligned(m, col, s.*, it.x);
     m.arrange();
+}
+
+var tag_travel: f64 = 0;
+
+/// Push the view up by delta pixels (down when negative), pulling the next
+/// (or previous) tag in behind it.
+pub fn swipeTags(m: *Monitor, delta: f64) void {
+    const t = m.tags();
+    if (@popCount(t) != 1) return;
+    const h: f64 = @floatFromInt(m.w.height);
+    tag_travel = std.math.clamp(tag_travel + delta, -h, h);
+    const offset: i32 = @intFromFloat(@round(tag_travel));
+    const next = if (offset > 0) t << 1 else t >> 1;
+    if (offset == 0 or next & actions.tagmask() == 0) {
+        // Nothing past the first or last tag.
+        tag_travel = 0;
+        m.swipe = null;
+    } else {
+        m.swipe = .{ .tags = next, .offset = offset };
+    }
+    m.arrange();
+}
+
+/// After a tag swipe: view the incoming tag if it came far enough, or slide back.
+pub fn snapTags(m: *Monitor) void {
+    const far = @abs(tag_travel) >= config.swipe_threshold;
+    tag_travel = 0;
+    const s = m.swipe orelse return;
+    m.swipe = null;
+    if (!far) return m.arrange();
+    server.selmon = m;
+    actions.view(&.{ .ui = s.tags });
 }

@@ -228,15 +228,15 @@ pub const axis_step = 40.0;
 pub const scroll_mod = MOD;
 
 /// Swiping sideways with this many fingers moves the strip under them; it
-/// snaps to the column nearest the middle when they lift.
+/// snaps to the column nearest the middle when they lift. Swiping up or down
+/// slides in the next or previous tag, which is viewed if it came at least
+/// swipe_threshold.
 pub const scroll_fingers = 3;
 pub const swipe_speed = 1.0;
 /// Other swipes run once per this much travel. Content follows the
 /// fingers: swiping up shows the next tag.
 pub const swipe_threshold = 120.0;
 pub const gestures = [_]a.Gesture{
-    .{ .fingers = 3, .dir = .up, .func = a.viewrel, .arg = .{ .i = 1 } },
-    .{ .fingers = 3, .dir = .down, .func = a.viewrel, .arg = .{ .i = -1 } },
     .{ .fingers = 4, .dir = .left, .func = a.movecolumn, .arg = .{ .i = -1 } },
     .{ .fingers = 4, .dir = .right, .func = a.movecolumn, .arg = .{ .i = 1 } },
     .{ .fingers = 4, .dir = .up, .func = a.tagrel, .arg = .{ .i = 1 } },
