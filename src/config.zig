@@ -191,12 +191,47 @@ pub const keys = [_]a.Key{
     tagkeys(K.@"6", 5) ++ tagkeys(K.@"7", 6) ++ tagkeys(K.@"8", 7) ++ tagkeys(K.@"9", 8) ++ tagkeys(K.@"0", 9) ++
     [_]a.Key{ chvt(1), chvt(2), chvt(3), chvt(4), chvt(5), chvt(6), chvt(7), chvt(8), chvt(9), chvt(10), chvt(11), chvt(12) };
 
+/// Mod with a mouse wheel: tags up and down, columns sideways. On a
+/// touchpad these fire once per axis_step of scrolling.
+pub const axes = [_]a.Axis{
+    .{ .mod = MOD, .dir = .up, .func = a.viewrel, .arg = .{ .i = -1 } },
+    .{ .mod = MOD, .dir = .down, .func = a.viewrel, .arg = .{ .i = 1 } },
+    .{ .mod = MOD | SHIFT, .dir = .up, .func = a.tagrel, .arg = .{ .i = -1 } },
+    .{ .mod = MOD | SHIFT, .dir = .down, .func = a.tagrel, .arg = .{ .i = 1 } },
+    .{ .mod = MOD, .dir = .left, .func = a.focusdir, .arg = .{ .ui = @intFromEnum(a.Dir.left) } },
+    .{ .mod = MOD, .dir = .right, .func = a.focusdir, .arg = .{ .ui = @intFromEnum(a.Dir.right) } },
+    .{ .mod = MOD | CTRL, .dir = .left, .func = a.movecolumn, .arg = .{ .i = -1 } },
+    .{ .mod = MOD | CTRL, .dir = .right, .func = a.movecolumn, .arg = .{ .i = 1 } },
+};
+pub const axis_step = 40.0;
+/// Touchpad scrolling sideways while holding this moves the strip, overriding the
+/// horizontal axes above.
+pub const scroll_mod = MOD;
+
+/// Swiping sideways with this many fingers moves the strip under them; it
+/// snaps to the column nearest the middle when they lift.
+pub const scroll_fingers = 3;
+pub const swipe_speed = 1.0;
+/// Other swipes run once per this much travel. Content follows the
+/// fingers: swiping up shows the next tag.
+pub const swipe_threshold = 120.0;
+pub const gestures = [_]a.Gesture{
+    .{ .fingers = 3, .dir = .up, .func = a.viewrel, .arg = .{ .i = 1 } },
+    .{ .fingers = 3, .dir = .down, .func = a.viewrel, .arg = .{ .i = -1 } },
+    .{ .fingers = 4, .dir = .left, .func = a.movecolumn, .arg = .{ .i = -1 } },
+    .{ .fingers = 4, .dir = .right, .func = a.movecolumn, .arg = .{ .i = 1 } },
+    .{ .fingers = 4, .dir = .up, .func = a.tagrel, .arg = .{ .i = 1 } },
+    .{ .fingers = 4, .dir = .down, .func = a.tagrel, .arg = .{ .i = -1 } },
+};
+
 pub const buttons = [_]a.Button{
     .{ .click = .ltsymbol, .mod = 0, .button = c.BTN_LEFT, .func = a.setlayout, .arg = .{ .v = &layouts[0] } },
     .{ .click = .ltsymbol, .mod = 0, .button = c.BTN_RIGHT, .func = a.setlayout, .arg = .{ .v = &layouts[2] } },
     .{ .click = .title, .mod = 0, .button = c.BTN_MIDDLE, .func = a.centercolumn },
     .{ .click = .client, .mod = MOD, .button = c.BTN_LEFT, .func = a.moveresize, .arg = .{ .ui = 0 } },
     .{ .click = .client, .mod = MOD, .button = c.BTN_RIGHT, .func = a.moveresize, .arg = .{ .ui = 1 } },
+    .{ .click = .client, .mod = MOD, .button = c.BTN_MIDDLE, .func = a.scrolldrag },
+    .{ .click = .root, .mod = MOD, .button = c.BTN_MIDDLE, .func = a.scrolldrag },
     .{ .click = .tagbar, .mod = 0, .button = c.BTN_LEFT, .func = a.view },
     .{ .click = .tagbar, .mod = 0, .button = c.BTN_RIGHT, .func = a.toggleview },
     .{ .click = .tagbar, .mod = MOD, .button = c.BTN_LEFT, .func = a.tag },

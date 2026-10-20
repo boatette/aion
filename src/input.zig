@@ -16,13 +16,26 @@ const menu = @import("menu.zig");
 
 const gpa = std.heap.c_allocator;
 
-pub const CursorMode = enum { normal, pressed, move, resize };
+pub const CursorMode = enum { normal, pressed, move, resize, scroll };
 
 pub var locked = false;
 pub var cursor_mode: CursorMode = .normal;
 var grabc: ?*Client = null;
 var grabcx: i32 = 0;
 var grabcy: i32 = 0;
+var grab_scroll_x: f64 = 0;
+
+/// A touchpad swipe the compositor handles itself instead of passing it on.
+const Swipe = struct {
+    fingers: u32 = 0,
+    mon: ?*Monitor = null,
+    dx: f64 = 0,
+    dy: f64 = 0,
+    axis: enum { none, horizontal, vertical } = .none,
+};
+var swipe: ?Swipe = null;
+var axis_acc: [2]f64 = .{ 0, 0 };
+var axis_scrolling: ?*Monitor = null;
 
 var xcursor: *wlr.XcursorManager = undefined;
 var group: *wlr.KeyboardGroup = undefined;
@@ -370,6 +383,12 @@ pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx_in: f64, dy_in: f64
             }, true);
             return;
         },
+        .scroll => {
+            const m = server.selmon orelse return;
+            scroll.scrollBy(m, grab_scroll_x - cursor.x);
+            grab_scroll_x = cursor.x;
+            return;
+        },
         .resize => if (grabc) |g| {
             g.resize(.{
                 .x = g.geom.x,
@@ -446,6 +465,12 @@ fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.even
             }
         },
         .released => {
+            if (cursor_mode == .scroll) {
+                updateCursor();
+                cursor_mode = .normal;
+                if (server.selmon) |m| scroll.snap(m);
+                return;
+            }
             if (!locked and cursor_mode != .normal and cursor_mode != .pressed) {
                 updateCursor();
                 cursor_mode = .normal;
@@ -461,9 +486,59 @@ fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.even
     _ = server.seat.pointerNotifyButton(event.time_msec, event.button, event.state);
 }
 
+fn axisBinding(mods: u32, dir: actions.Dir) ?*const actions.Axis {
+    for (&config.axes) |*a| if (clean(mods) == clean(a.mod) and a.dir == dir) return a;
+    return null;
+}
+
 fn onAxis(_: *wl.Listener(*wlr.Pointer.event.Axis), event: *wlr.Pointer.event.Axis) void {
     lock.activity();
+    if (!locked and handleAxis(event)) return;
     server.seat.pointerNotifyAxis(event.time_msec, event.orientation, event.delta, event.delta_discrete, event.source, event.relative_direction);
+}
+
+/// Wheels run a binding per notch. Touchpad scrolling with the scroll
+/// modifier moves the strip sideways, and runs vertical bindings once per
+/// axis_step instead of on every tiny event.
+fn handleAxis(event: *wlr.Pointer.event.Axis) bool {
+    const mods = modifiers();
+    const horizontal = event.orientation == .horizontal_scroll;
+    const smooth = event.source == .finger or event.source == .continuous;
+
+    if (smooth and horizontal and clean(mods) == clean(config.scroll_mod)) {
+        const m = monAt(server.cursor.x, server.cursor.y) orelse return false;
+        if (!scroll.isScrolling(m)) return false;
+        if (event.delta == 0) {
+            // Fingers lifted.
+            scroll.snap(m);
+            axis_scrolling = null;
+        } else {
+            scroll.scrollBy(m, event.delta * config.swipe_speed);
+            axis_scrolling = m;
+        }
+        return true;
+    }
+
+    const dir: actions.Dir = if (horizontal)
+        (if (event.delta > 0) .right else .left)
+    else
+        (if (event.delta > 0) .down else .up);
+    const a = axisBinding(mods, dir) orelse return false;
+    if (!smooth) {
+        if (event.delta != 0) a.func(&a.arg);
+        return true;
+    }
+    const i: usize = @intFromBool(horizontal);
+    if (event.delta == 0) {
+        axis_acc[i] = 0;
+        return true;
+    }
+    axis_acc[i] += event.delta;
+    if (@abs(axis_acc[i]) >= config.axis_step) {
+        axis_acc[i] = 0;
+        a.func(&a.arg);
+    }
+    return true;
 }
 
 fn onFrame(_: *wl.Listener(*wlr.Cursor), _: *wlr.Cursor) void {
@@ -537,18 +612,57 @@ fn onNewConstraint(_: *wl.Listener(*wlr.PointerConstraintV1), con: *wlr.PointerC
     motionNotify(0, null, 0, 0, 0, 0);
 }
 
-fn onSwipeBegin(_: *wl.Listener(*wlr.Pointer.event.SwipeBegin), event: *wlr.Pointer.event.SwipeBegin) void {
-    lock.activity();
-    gestures.sendSwipeBegin(server.seat, event.time_msec, event.fingers);
+fn captures(fingers: u32) bool {
+    if (fingers == config.scroll_fingers) return true;
+    for (config.gestures) |g| if (g.fingers == fingers) return true;
+    return false;
 }
 
+fn gestureFor(fingers: u32, dir: actions.Dir) ?*const actions.Gesture {
+    for (&config.gestures) |*g| if (g.fingers == fingers and g.dir == dir) return g;
+    return null;
+}
+
+fn onSwipeBegin(_: *wl.Listener(*wlr.Pointer.event.SwipeBegin), event: *wlr.Pointer.event.SwipeBegin) void {
+    lock.activity();
+    if (locked or !captures(event.fingers)) {
+        swipe = null;
+        return gestures.sendSwipeBegin(server.seat, event.time_msec, event.fingers);
+    }
+    swipe = .{ .fingers = event.fingers, .mon = monAt(server.cursor.x, server.cursor.y) orelse server.selmon };
+}
+
+/// Horizontal swipes with scroll_fingers move the strip with the fingers.
+/// Other swipes run their gesture once per swipe_threshold travelled.
 fn onSwipeUpdate(_: *wl.Listener(*wlr.Pointer.event.SwipeUpdate), event: *wlr.Pointer.event.SwipeUpdate) void {
     lock.activity();
-    gestures.sendSwipeUpdate(server.seat, event.time_msec, event.dx, event.dy);
+    const sw = &(swipe orelse return gestures.sendSwipeUpdate(server.seat, event.time_msec, event.dx, event.dy));
+    sw.dx += event.dx;
+    sw.dy += event.dy;
+    if (sw.axis == .none) {
+        if (@max(@abs(sw.dx), @abs(sw.dy)) < 10) return;
+        sw.axis = if (@abs(sw.dx) > @abs(sw.dy)) .horizontal else .vertical;
+    }
+
+    if (sw.axis == .horizontal and sw.fingers == config.scroll_fingers) {
+        if (sw.mon) |m| scroll.scrollBy(m, -event.dx * config.swipe_speed);
+        return;
+    }
+
+    const d = if (sw.axis == .horizontal) &sw.dx else &sw.dy;
+    if (@abs(d.*) < config.swipe_threshold) return;
+    const dir: actions.Dir = switch (sw.axis) {
+        .horizontal => if (d.* > 0) .right else .left,
+        else => if (d.* > 0) .down else .up,
+    };
+    d.* = 0;
+    if (gestureFor(sw.fingers, dir)) |g| g.func(&g.arg);
 }
 
 fn onSwipeEnd(_: *wl.Listener(*wlr.Pointer.event.SwipeEnd), event: *wlr.Pointer.event.SwipeEnd) void {
-    gestures.sendSwipeEnd(server.seat, event.time_msec, event.cancelled);
+    const sw = swipe orelse return gestures.sendSwipeEnd(server.seat, event.time_msec, event.cancelled);
+    swipe = null;
+    if (sw.axis == .horizontal and sw.fingers == config.scroll_fingers) if (sw.mon) |m| scroll.snap(m);
 }
 
 fn onPinchBegin(_: *wl.Listener(*wlr.Pointer.event.PinchBegin), event: *wlr.Pointer.event.PinchBegin) void {
@@ -603,6 +717,12 @@ fn onDragIconDestroy(_: *wl.Listener(*wlr.Drag.Icon), _: *wlr.Drag.Icon) void {
 /// Start an interactive move or resize of the client under the cursor.
 pub fn grab(mode: CursorMode) void {
     if (cursor_mode != .pressed) return;
+    if (mode == .scroll) {
+        cursor_mode = .scroll;
+        grab_scroll_x = server.cursor.x;
+        server.cursor.setXcursor(xcursor, "grabbing");
+        return;
+    }
     const hit = server.hitTest(server.cursor.x, server.cursor.y);
     const cl = hit.client orelse return;
     if (cl.fullscreen or cl.unmanaged()) return;

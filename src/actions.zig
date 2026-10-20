@@ -44,6 +44,22 @@ pub const Button = struct {
     arg: Arg = .{ .i = 0 },
 };
 
+pub const Dir = enum { left, right, up, down };
+
+pub const Axis = struct {
+    mod: u32,
+    dir: Dir,
+    func: Func,
+    arg: Arg = .{ .i = 0 },
+};
+
+pub const Gesture = struct {
+    fingers: u32,
+    dir: Dir,
+    func: Func,
+    arg: Arg = .{ .i = 0 },
+};
+
 pub const Layout = struct {
     symbol: [:0]const u8,
     arrange: ?*const fn (*Monitor) void,
@@ -145,6 +161,11 @@ pub fn moveresize(arg: *const Arg) void {
     input.grab(if (arg.ui == 0) .move else .resize);
 }
 
+/// Drag the strip with the pointer.
+pub fn scrolldrag(_: *const Arg) void {
+    input.grab(.scroll);
+}
+
 /// Keyboard-driven focus: also scrolls the window's column into view.
 pub fn focus(cl: *Client) void {
     server.focus(cl, true);
@@ -209,7 +230,7 @@ pub fn tagfollow(arg: *const Arg) void {
     focus(sel);
 }
 
-fn seltag() ?u5 {
+fn seltag() ?i32 {
     const m = server.selmon orelse return null;
     const t = m.tags();
     return if (t == 0) null else @ctz(t);
@@ -217,15 +238,13 @@ fn seltag() ?u5 {
 
 /// Previous/next tag, without wrapping.
 pub fn viewrel(arg: *const Arg) void {
-    const i: i32 = seltag() orelse return;
-    const n = i + arg.i;
+    const n = (seltag() orelse return) + arg.i;
     if (n < 0 or n >= config.tags.len) return;
     view(&.{ .ui = @as(u32, 1) << @intCast(n) });
 }
 
 pub fn tagrel(arg: *const Arg) void {
-    const i: i32 = seltag() orelse return;
-    const n = i + arg.i;
+    const n = (seltag() orelse return) + arg.i;
     if (n < 0 or n >= config.tags.len) return;
     tagfollow(&.{ .ui = @as(u32, 1) << @intCast(n) });
 }
@@ -289,8 +308,6 @@ pub fn forcekill(_: *const Arg) void {
     const pid = sel.pid();
     if (pid > 0) _ = c.kill(pid, c.SIGKILL);
 }
-
-pub const Dir = enum(u32) { left, right, up, down };
 
 /// Nearest visible window in a direction, by distance between corners.
 pub fn focusnearest(arg: *const Arg) void {

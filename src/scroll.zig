@@ -362,3 +362,37 @@ pub fn changeHeight(cl: *Client, delta: f32) void {
     cl.weight = share * rest / (1 - share);
     cl.mon.?.arrange();
 }
+
+var remainder: f64 = 0;
+
+/// Move the strip by delta pixels; positive shows more of the right side.
+pub fn scrollBy(m: *Monitor, delta: f64) void {
+    if (!isScrolling(m)) return;
+    remainder += delta;
+    const whole = @trunc(remainder);
+    if (whole == 0) return;
+    remainder -= whole;
+    m.scroll[slot(m)] += @intFromFloat(whole);
+    m.arrange();
+}
+
+/// After a free scroll: focus the column nearest the middle and bring it fully into view.
+pub fn snap(m: *Monitor) void {
+    remainder = 0;
+    if (!isScrolling(m)) return;
+    const middle = m.scroll[slot(m)] + @divTrunc(m.w.width, 2);
+    var best: ?Column = null;
+    var best_dist: i32 = std.math.maxInt(i32);
+    var it = Columns.init(m);
+    while (it.next()) |col| {
+        const dist: i32 = @intCast(@abs(col.x + @divTrunc(col.w, 2) - middle));
+        if (dist < best_dist) {
+            best_dist = dist;
+            best = col;
+        }
+    }
+    const col = best orelse return;
+    const cl = lastFocused(col);
+    server.focus(cl, true);
+    reveal(cl);
+}
