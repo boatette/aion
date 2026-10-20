@@ -11,6 +11,7 @@ const input = @import("input.zig");
 const server = &@import("main.zig").server;
 const Client = @import("Client.zig");
 const LayerSurface = @import("LayerSurface.zig");
+const lock = @import("lock.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -30,6 +31,7 @@ ltsymbol: [16:0]u8 = @splat(0),
 scroll: [config.tags.len + 1]i32 = @splat(0),
 /// Layer surfaces per layer, background to overlay, newest first.
 layers: [4]wl.list.Head(LayerSurface, .link) = undefined,
+lock_surface: ?*lock.LockSurface = null,
 
 frame: wl.Listener(*wlr.Output) = .init(onFrame),
 destroy: wl.Listener(*wlr.Output) = .init(onDestroy),
@@ -99,6 +101,7 @@ fn onDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
         var lit = list.iterator(.forward);
         while (lit.next()) |l| l.layer_surface.destroy();
     }
+    lock.monitorGone(m);
     m.frame.link.remove();
     m.destroy.link.remove();
     m.request_state.link.remove();
@@ -152,6 +155,7 @@ pub fn updateAll() void {
     server.output_layout.getBox(null, &all);
     server.root_bg.node.setPosition(all.x, all.y);
     server.root_bg.setSize(all.width, all.height);
+    lock.updateLayout(all);
 
     it = server.monitors.iterator(.forward);
     while (it.next()) |m| {
@@ -243,6 +247,7 @@ pub fn arrange(m: *Monitor) void {
 
     if (lt.arrange) |f| f(m);
     input.motionNotify(0, null, 0, 0, 0, 0);
+    lock.checkInhibitors(null);
 }
 
 pub fn setSymbol(m: *Monitor, s: []const u8) void {

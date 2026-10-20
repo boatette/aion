@@ -10,6 +10,7 @@ const scroll = @import("scroll.zig");
 const server = &@import("main.zig").server;
 const Client = @import("Client.zig");
 const Monitor = @import("Monitor.zig");
+const lock = @import("lock.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -143,6 +144,7 @@ const Keyboard = struct {
     fn binding(k: *Keyboard) ?*const actions.Key {
         for (k.syms) |sym| {
             for (&config.keys) |*key| {
+                if (locked and !key.locked) continue;
                 if (clean(k.mods) == clean(key.mod) and sym == key.sym) return key;
             }
         }
@@ -161,9 +163,10 @@ const Keyboard = struct {
             sym.* = if (syms.len > 0) syms[0] else .NoSymbol;
         }
         k.mods = @bitCast(k.kb.getModifiers());
+        lock.activity();
 
         var handled = false;
-        if (!locked and event.state == .pressed) {
+        if (event.state == .pressed) {
             if (k.binding()) |key| {
                 consumed.set(event.keycode);
                 key.func(&key.arg);
@@ -280,6 +283,7 @@ pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx: f64, dy: f64, dx_u
     _ = dy_unaccel;
     const cursor = server.cursor;
     if (time != 0) {
+        lock.activity();
         cursor.move(device, dx, dy);
         if (config.sloppyfocus) server.selmon = monAt(cursor.x, cursor.y) orelse server.selmon;
     }
@@ -341,6 +345,7 @@ fn pointerFocus(cl: ?*Client, s: ?*wlr.Surface, sx: f64, sy: f64, time: u32) voi
 }
 
 fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.event.Button) void {
+    lock.activity();
     switch (event.state) {
         .pressed => {
             cursor_mode = .pressed;
@@ -379,6 +384,7 @@ fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.even
 }
 
 fn onAxis(_: *wl.Listener(*wlr.Pointer.event.Axis), event: *wlr.Pointer.event.Axis) void {
+    lock.activity();
     server.seat.pointerNotifyAxis(event.time_msec, event.orientation, event.delta, event.delta_discrete, event.source, event.relative_direction);
 }
 

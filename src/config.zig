@@ -99,7 +99,7 @@ fn both(comptime mod: u32, comptime vim: xkb.Keysym, comptime arrow: xkb.Keysym,
 }
 
 fn chvt(comptime n: u32) a.Key {
-    return .{ .mod = CTRL | ALT, .sym = @enumFromInt(@intFromEnum(K.F1) + n - 1), .func = a.chvt, .arg = .{ .ui = n } };
+    return .{ .mod = CTRL | ALT, .sym = @enumFromInt(@intFromEnum(K.F1) + n - 1), .func = a.chvt, .arg = .{ .ui = n }, .locked = true };
 }
 
 pub const keys = [_]a.Key{

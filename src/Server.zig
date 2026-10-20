@@ -108,6 +108,7 @@ pub fn init(s: *Server) !void {
     renderer.events.lost.add(&s.renderer_lost);
 
     try input.init();
+    try @import("lock.zig").init();
 }
 
 pub fn start(s: *Server, startup: ?[*:0]const u8) !void {

@@ -31,6 +31,8 @@ pub const Key = struct {
     sym: xkb.Keysym,
     func: Func,
     arg: Arg = .{ .i = 0 },
+    /// Also runs while the session is locked.
+    locked: bool = false,
 };
 
 pub const Button = struct {
