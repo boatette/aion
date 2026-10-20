@@ -10,15 +10,21 @@ const scroll = @import("scroll.zig");
 const server = &@import("main.zig").server;
 const Monitor = @import("Monitor.zig");
 const Server = @import("Server.zig");
+const xwayland = @import("build_options").xwayland;
 
 const gpa = std.heap.c_allocator;
+
+pub const Shell = union(enum) {
+    xdg: *wlr.XdgToplevel,
+    x11: *wlr.XwaylandSurface,
+};
 
 /// Strip order; columns are runs of visible tiled clients in this list.
 link: wl.list.Link = undefined,
 /// Focus order, most recent first.
 flink: wl.list.Link = undefined,
 owner: Server.Owner = undefined,
-toplevel: *wlr.XdgToplevel,
+shell: Shell,
 decoration: ?*wlr.XdgToplevelDecorationV1 = null,
 scene: *wlr.SceneTree = undefined,
 scene_surface: *wlr.SceneTree = undefined,
@@ -52,10 +58,15 @@ request_fullscreen: wl.Listener(void) = .init(onRequestFullscreen),
 request_maximize: wl.Listener(void) = .init(onRequestMaximize),
 decoration_mode: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(onDecorationMode),
 decoration_destroy: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(onDecorationDestroy),
+associate: wl.Listener(void) = .init(onAssociate),
+dissociate: wl.Listener(void) = .init(onDissociate),
+request_configure: wl.Listener(*wlr.XwaylandSurface.event.Configure) = .init(onRequestConfigure),
+request_activate_x11: wl.Listener(void) = .init(onRequestActivateX11),
+set_hints: wl.Listener(void) = .init(onSetHints),
 
 pub fn createXdg(_: *wl.Listener(*wlr.XdgToplevel), toplevel: *wlr.XdgToplevel) void {
     const cl = gpa.create(Client) catch return;
-    cl.* = .{ .toplevel = toplevel };
+    cl.* = .{ .shell = .{ .xdg = toplevel } };
     cl.owner = .{ .client = cl };
     toplevel.base.data = cl;
     toplevel.base.surface.events.commit.add(&cl.commit);
@@ -67,8 +78,42 @@ pub fn createXdg(_: *wl.Listener(*wlr.XdgToplevel), toplevel: *wlr.XdgToplevel) 
     toplevel.events.request_maximize.add(&cl.request_maximize);
 }
 
+pub fn createX11(_: *wl.Listener(*wlr.XwaylandSurface), xsurface: *wlr.XwaylandSurface) void {
+    const cl = gpa.create(Client) catch return;
+    cl.* = .{ .shell = .{ .x11 = xsurface } };
+    cl.owner = .{ .client = cl };
+    xsurface.data = cl;
+    xsurface.events.associate.add(&cl.associate);
+    xsurface.events.dissociate.add(&cl.dissociate);
+    xsurface.events.destroy.add(&cl.destroy);
+    xsurface.events.set_title.add(&cl.set_title);
+    xsurface.events.request_fullscreen.add(&cl.request_fullscreen);
+    xsurface.events.request_configure.add(&cl.request_configure);
+    xsurface.events.request_activate.add(&cl.request_activate_x11);
+    xsurface.events.set_hints.add(&cl.set_hints);
+}
+
+/// Only valid once mapped; X11 windows have no surface before that.
 pub fn surface(cl: *const Client) *wlr.Surface {
-    return cl.toplevel.base.surface;
+    return switch (cl.shell) {
+        .xdg => |t| t.base.surface,
+        .x11 => |x| x.surface.?,
+    };
+}
+
+pub fn mapped(cl: *const Client) bool {
+    return switch (cl.shell) {
+        .xdg => |t| t.base.surface.mapped,
+        .x11 => |x| if (x.surface) |s| s.mapped else false,
+    };
+}
+
+/// Override-redirect X11 windows: menus and tooltips placed by the app itself.
+pub fn unmanaged(cl: *const Client) bool {
+    return switch (cl.shell) {
+        .xdg => false,
+        .x11 => |x| x.override_redirect,
+    };
 }
 
 pub fn fromSurface(s: *wlr.Surface) ?*Client {
@@ -80,20 +125,53 @@ pub fn fromSurface(s: *wlr.Surface) ?*Client {
             .none => return null,
         }
     }
+    if (xwayland) if (wlr.XwaylandSurface.tryFromWlrSurface(cur)) |x| return @ptrCast(@alignCast(x.data orelse return null));
     return null;
 }
 
 pub fn title(cl: *const Client) []const u8 {
-    return std.mem.span(cl.toplevel.title orelse return "");
+    const t = switch (cl.shell) {
+        .xdg => |t| t.title,
+        .x11 => |x| x.title,
+    };
+    return std.mem.span(t orelse return "");
 }
 
 pub fn appId(cl: *const Client) []const u8 {
-    return std.mem.span(cl.toplevel.app_id orelse return "");
+    const id = switch (cl.shell) {
+        .xdg => |t| t.app_id,
+        .x11 => |x| x.class,
+    };
+    return std.mem.span(id orelse return "");
 }
 
 pub fn parent(cl: *const Client) ?*Client {
-    const p = cl.toplevel.parent orelse return null;
-    return @ptrCast(@alignCast(p.base.data orelse return null));
+    const data = switch (cl.shell) {
+        .xdg => |t| (t.parent orelse return null).base.data,
+        .x11 => |x| (x.parent orelse return null).data,
+    };
+    return @ptrCast(@alignCast(data orelse return null));
+}
+
+extern fn wlr_xwayland_surface_has_window_type(surface: *const wlr.XwaylandSurface, window_type: c_int) bool;
+
+/// Dialogs, fixed-size windows and the like float by default.
+pub fn floatType(cl: *const Client) bool {
+    switch (cl.shell) {
+        .xdg => |t| {
+            const cur = t.current;
+            const sized = cur.min_width > 0 or cur.min_height > 0 or cur.max_width > 0 or cur.max_height > 0;
+            return t.parent != null or (sized and (cur.min_width == cur.max_width or cur.min_height == cur.max_height));
+        },
+        .x11 => |x| {
+            if (!xwayland) unreachable;
+            if (x.modal) return true;
+            // toolbar, utility, splash, dialog
+            for ([_]c_int{ 2, 4, 5, 6 }) |t| if (wlr_xwayland_surface_has_window_type(x, t)) return true;
+            const h = x.size_hints orelse return false;
+            return h.min_width > 0 and h.min_height > 0 and (h.max_width == h.min_width or h.max_height == h.min_height);
+        },
+    }
 }
 
 pub fn visibleOn(cl: *const Client, m: ?*const Monitor) bool {
@@ -106,40 +184,73 @@ pub fn tiled(cl: *const Client) bool {
 }
 
 pub fn pid(cl: *const Client) i32 {
-    return cl.toplevel.base.client.client.getCredentials().pid;
+    return switch (cl.shell) {
+        .xdg => |t| t.base.client.client.getCredentials().pid,
+        .x11 => |x| x.pid,
+    };
 }
 
 pub fn close(cl: *Client) void {
-    cl.toplevel.sendClose();
+    switch (cl.shell) {
+        .xdg => |t| t.sendClose(),
+        .x11 => |x| if (xwayland) x.close() else unreachable,
+    }
 }
 
 pub fn activate(cl: *Client, on: bool) void {
     if (cl.activated == on) return;
     cl.activated = on;
-    _ = cl.toplevel.setActivated(on);
+    switch (cl.shell) {
+        .xdg => |t| _ = t.setActivated(on),
+        .x11 => |x| if (xwayland) x.activate(on) else unreachable,
+    }
 }
 
 pub fn setSuspended(cl: *Client, on: bool) void {
     if (cl.suspended == on) return;
     cl.suspended = on;
-    _ = cl.toplevel.setSuspended(on);
+    switch (cl.shell) {
+        .xdg => |t| _ = t.setSuspended(on),
+        .x11 => {},
+    }
 }
 
 /// Tiled windows are told so, which stops terminals snapping to whole cells.
 fn setTiled(cl: *Client, on: bool) void {
     const all: wlr.Edges = .{ .top = true, .bottom = true, .left = true, .right = true };
-    _ = cl.toplevel.setTiled(if (on) all else .{});
+    switch (cl.shell) {
+        .xdg => |t| _ = t.setTiled(if (on) all else .{}),
+        .x11 => {},
+    }
 }
 
 pub fn setBorderColor(cl: *Client, color: *const [4]f32) void {
-    if (!cl.surface().mapped) return;
+    if (!cl.mapped() or cl.unmanaged()) return;
     for (cl.border) |b| b.setColor(color);
 }
 
 fn setSize(cl: *Client, width: i32, height: i32) void {
-    const s = &cl.toplevel.scheduled;
-    if (s.width == width and s.height == height) return;
-    cl.resize_serial = cl.toplevel.setSize(width, height);
+    switch (cl.shell) {
+        .xdg => |t| {
+            const s = &t.scheduled;
+            if (s.width == width and s.height == height) return;
+            cl.resize_serial = t.setSize(width, height);
+        },
+        // X11 windows also need their position, which changes when scrolling.
+        .x11 => |x| if (xwayland) x.configure(
+            @intCast(std.math.clamp(cl.geom.x + cl.bw, std.math.minInt(i16), std.math.maxInt(i16))),
+            @intCast(std.math.clamp(cl.geom.y + cl.bw, std.math.minInt(i16), std.math.maxInt(i16))),
+            @intCast(@max(width, 1)),
+            @intCast(@max(height, 1)),
+        ) else unreachable,
+    }
+}
+
+fn geometryOffset(cl: *const Client) [2]i32 {
+    return switch (cl.shell) {
+        .xdg => |t| .{ t.base.geometry.x, t.base.geometry.y },
+        .x11 => .{ 0, 0 },
+    };
 }
 
 /// Place the client at geo (layout coordinates, borders included). Tiled
@@ -147,7 +258,7 @@ fn setSize(cl: *Client, width: i32, height: i32) void {
 /// never shows on a neighbouring output.
 pub fn resize(cl: *Client, geo: wlr.Box, interact: bool) void {
     const m = cl.mon orelse return;
-    if (!cl.surface().mapped) return;
+    if (!cl.mapped()) return;
 
     const bw = cl.bw;
     cl.geom = geo;
@@ -197,10 +308,10 @@ pub fn resize(cl: *Client, geo: wlr.Box, interact: bool) void {
     const shown = cv.intersection(&content, &vis);
     cl.scene_surface.node.setEnabled(shown);
     if (shown) {
-        const geometry = cl.toplevel.base.geometry;
+        const off = cl.geometryOffset();
         const clip: wlr.Box = .{
-            .x = geometry.x + cv.x - bw,
-            .y = geometry.y + cv.y - bw,
+            .x = off[0] + cv.x - bw,
+            .y = off[1] + cv.y - bw,
             .width = cv.width,
             .height = cv.height,
         };
@@ -211,9 +322,12 @@ pub fn resize(cl: *Client, geo: wlr.Box, interact: bool) void {
 pub fn setFullscreen(cl: *Client, on: bool) void {
     cl.fullscreen = on;
     const m = cl.mon orelse return;
-    if (!cl.surface().mapped) return;
+    if (!cl.mapped()) return;
     cl.bw = if (on) 0 else config.borderpx;
-    _ = cl.toplevel.setFullscreen(on);
+    switch (cl.shell) {
+        .xdg => |t| _ = t.setFullscreen(on),
+        .x11 => |x| if (xwayland) x.setFullscreen(on) else unreachable,
+    }
     cl.scene.node.reparent(server.layers.get(if (on) .fs else if (cl.floating) .float else .tile));
     if (on) {
         cl.prev = cl.geom;
@@ -228,7 +342,7 @@ pub fn setFloating(cl: *Client, on: bool) void {
     cl.floating = on;
     cl.setTiled(!on);
     const m = cl.mon orelse return;
-    if (!cl.surface().mapped or m.layout().arrange == null) return;
+    if (!cl.mapped() or m.layout().arrange == null) return;
     const p = cl.parent();
     cl.scene.node.reparent(server.layers.get(if (cl.fullscreen or (p != null and p.?.fullscreen)) .fs else if (on) .float else .tile));
     m.arrange();
@@ -284,37 +398,51 @@ fn applyRules(cl: *Client) void {
 
 fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const cl: *Client = @fieldParentPtr("commit", listener);
-    if (cl.toplevel.base.initial_commit) {
-        _ = cl.toplevel.setWmCapabilities(.{ .fullscreen = true });
+    const t = cl.shell.xdg;
+    if (t.base.initial_commit) {
+        _ = t.setWmCapabilities(.{ .fullscreen = true });
         // Tiled windows get their column size in the first configure, so they
         // don't draw once at a size they never keep.
         const size = scroll.initialSize(cl);
-        _ = cl.toplevel.setSize(size[0], size[1]);
+        _ = t.setSize(size[0], size[1]);
         cl.setTiled(size[0] != 0);
         if (cl.decoration) |d| _ = d.setMode(.server_side);
         return;
     }
     if (cl.mon == null) return;
     cl.resize(cl.geom, cl.floating and !cl.fullscreen);
-    if (cl.resize_serial != 0 and cl.resize_serial <= cl.toplevel.base.current.configure_serial)
+    if (cl.resize_serial != 0 and cl.resize_serial <= t.base.current.configure_serial)
         cl.resize_serial = 0;
 }
 
 fn onMap(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("map", listener);
     cl.scene = server.layers.get(.tile).createSceneTree() catch return;
-    cl.scene_surface = cl.scene.createSceneXdgSurface(cl.toplevel.base) catch return;
+    cl.scene_surface = switch (cl.shell) {
+        .xdg => |t| cl.scene.createSceneXdgSurface(t.base),
+        .x11 => |x| cl.scene.createSceneSubsurfaceTree(x.surface.?),
+    } catch return;
     cl.scene.node.data = &cl.owner;
     cl.surface().data = cl.scene;
-    for (&cl.border) |*b| b.* = cl.scene.createSceneRect(0, 0, &config.bordercolor) catch return;
 
-    const geometry = cl.toplevel.base.geometry;
-    cl.geom = .{
-        .x = 0,
-        .y = 0,
-        .width = geometry.width + 2 * cl.bw,
-        .height = geometry.height + 2 * cl.bw,
-    };
+    switch (cl.shell) {
+        .xdg => |t| cl.geom = .{ .x = 0, .y = 0, .width = t.base.geometry.width, .height = t.base.geometry.height },
+        .x11 => |x| cl.geom = .{ .x = x.x, .y = x.y, .width = x.width, .height = x.height },
+    }
+
+    if (cl.unmanaged()) {
+        const x = cl.shell.x11;
+        cl.bw = 0;
+        cl.scene.node.reparent(server.layers.get(.float));
+        cl.scene.node.setPosition(cl.geom.x, cl.geom.y);
+        if (xwayland and x.overrideRedirectWantsFocus() and x.icccmInputModel() != .none)
+            input.keyboardEnter(cl.surface());
+        return;
+    }
+
+    for (&cl.border) |*b| b.* = cl.scene.createSceneRect(0, 0, &config.bordercolor) catch return;
+    cl.geom.width += 2 * cl.bw;
+    cl.geom.height += 2 * cl.bw;
 
     scroll.insert(cl);
     server.fstack.prepend(cl);
@@ -323,6 +451,7 @@ fn onMap(listener: *wl.Listener(void)) void {
         cl.floating = true;
         cl.setMon(p.mon, p.tags);
     } else {
+        cl.floating = cl.floatType();
         applyRules(cl);
     }
     if (cl.tiled()) scroll.reveal(cl);
@@ -330,24 +459,39 @@ fn onMap(listener: *wl.Listener(void)) void {
 
 fn onUnmap(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("unmap", listener);
-    input.clientGone(cl);
-    scroll.remove(cl);
-    cl.link.remove();
-    cl.setMon(null, 0);
-    cl.flink.remove();
+    if (cl.unmanaged()) {
+        if (server.seat.keyboard_state.focused_surface == cl.surface()) server.focus(server.focustop(server.selmon), true);
+    } else {
+        input.clientGone(cl);
+        scroll.remove(cl);
+        cl.link.remove();
+        cl.setMon(null, 0);
+        cl.flink.remove();
+    }
     cl.scene.node.destroy();
     input.motionNotify(0, null, 0, 0, 0, 0);
 }
 
 fn onDestroy(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("destroy", listener);
-    cl.commit.link.remove();
-    cl.map.link.remove();
-    cl.unmap.link.remove();
     cl.destroy.link.remove();
     cl.set_title.link.remove();
     cl.request_fullscreen.link.remove();
-    cl.request_maximize.link.remove();
+    switch (cl.shell) {
+        .xdg => {
+            cl.commit.link.remove();
+            cl.map.link.remove();
+            cl.unmap.link.remove();
+            cl.request_maximize.link.remove();
+        },
+        .x11 => {
+            cl.associate.link.remove();
+            cl.dissociate.link.remove();
+            cl.request_configure.link.remove();
+            cl.request_activate_x11.link.remove();
+            cl.set_hints.link.remove();
+        },
+    }
     gpa.destroy(cl);
 }
 
@@ -355,17 +499,72 @@ fn onSetTitle(_: *wl.Listener(void)) void {}
 
 fn onRequestFullscreen(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("request_fullscreen", listener);
-    if (cl.mon == null or !cl.surface().mapped) {
-        cl.fullscreen = cl.toplevel.requested.fullscreen;
+    const want = switch (cl.shell) {
+        .xdg => |t| t.requested.fullscreen,
+        .x11 => |x| x.fullscreen,
+    };
+    if (cl.mon == null or !cl.mapped()) {
+        cl.fullscreen = want;
         return;
     }
-    cl.setFullscreen(cl.toplevel.requested.fullscreen);
+    cl.setFullscreen(want);
 }
 
 fn onRequestMaximize(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("request_maximize", listener);
     // Maximizing means nothing here, but the protocol still wants a configure.
-    if (cl.toplevel.base.initialized) _ = cl.toplevel.base.scheduleConfigure();
+    const t = cl.shell.xdg;
+    if (t.base.initialized) _ = t.base.scheduleConfigure();
+}
+
+fn onAssociate(listener: *wl.Listener(void)) void {
+    const cl: *Client = @fieldParentPtr("associate", listener);
+    const s = cl.surface();
+    s.events.map.add(&cl.map);
+    s.events.unmap.add(&cl.unmap);
+}
+
+fn onDissociate(listener: *wl.Listener(void)) void {
+    const cl: *Client = @fieldParentPtr("dissociate", listener);
+    cl.map.link.remove();
+    cl.unmap.link.remove();
+}
+
+fn onRequestConfigure(listener: *wl.Listener(*wlr.XwaylandSurface.event.Configure), event: *wlr.XwaylandSurface.event.Configure) void {
+    if (!xwayland) unreachable;
+    const cl: *Client = @fieldParentPtr("request_configure", listener);
+    const x = cl.shell.x11;
+    if (!cl.mapped() or cl.unmanaged()) {
+        if (cl.mapped()) cl.scene.node.setPosition(event.x, event.y);
+        x.configure(event.x, event.y, event.width, event.height);
+        return;
+    }
+    const m = cl.mon orelse return;
+    if (cl.floating or m.layout().arrange == null) {
+        cl.resize(.{
+            .x = event.x - cl.bw,
+            .y = event.y - cl.bw,
+            .width = @as(i32, event.width) + 2 * cl.bw,
+            .height = @as(i32, event.height) + 2 * cl.bw,
+        }, false);
+    } else {
+        m.arrange();
+    }
+}
+
+fn onRequestActivateX11(listener: *wl.Listener(void)) void {
+    if (!xwayland) unreachable;
+    const cl: *Client = @fieldParentPtr("request_activate_x11", listener);
+    if (!cl.unmanaged()) cl.shell.x11.activate(true);
+}
+
+fn onSetHints(listener: *wl.Listener(void)) void {
+    const cl: *Client = @fieldParentPtr("set_hints", listener);
+    const hints = cl.shell.x11.hints orelse return;
+    if (cl == server.focustop(server.selmon)) return;
+    // XUrgencyHint
+    cl.urgent = hints.flags & (1 << 8) != 0;
+    if (cl.urgent) cl.setBorderColor(&config.urgentcolor);
 }
 
 pub fn createDecoration(_: *wl.Listener(*wlr.XdgToplevelDecorationV1), deco: *wlr.XdgToplevelDecorationV1) void {
@@ -379,7 +578,7 @@ pub fn createDecoration(_: *wl.Listener(*wlr.XdgToplevelDecorationV1), deco: *wl
 /// Borders are drawn here, so clients never draw their own decorations.
 fn onDecorationMode(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), deco: *wlr.XdgToplevelDecorationV1) void {
     const cl: *Client = @fieldParentPtr("decoration_mode", listener);
-    if (cl.toplevel.base.initialized) _ = deco.setMode(.server_side);
+    if (cl.shell.xdg.base.initialized) _ = deco.setMode(.server_side);
 }
 
 fn onDecorationDestroy(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), _: *wlr.XdgToplevelDecorationV1) void {
@@ -391,7 +590,7 @@ fn onDecorationDestroy(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), _: 
 
 pub fn requestActivate(_: *wl.Listener(*wlr.XdgActivationV1.event.RequestActivate), event: *wlr.XdgActivationV1.event.RequestActivate) void {
     const cl = fromSurface(event.surface) orelse return;
-    if (cl == server.focustop(server.selmon) or !cl.surface().mapped) return;
+    if (cl == server.focustop(server.selmon) or !cl.mapped()) return;
     if (config.focus_on_activate) {
         const m = cl.mon orelse return;
         if (!cl.visibleOn(m)) {

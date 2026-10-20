@@ -237,7 +237,7 @@ pub fn updateAll() void {
 
     if (server.selmon) |sel| if (sel.output.enabled) {
         var cit = server.clients.iterator(.forward);
-        while (cit.next()) |cl| if (cl.mon == null and cl.surface().mapped) cl.setMon(sel, cl.tags);
+        while (cit.next()) |cl| if (cl.mon == null and cl.mapped()) cl.setMon(sel, cl.tags);
         server.focus(server.focustop(sel), true);
     };
     publishConfig();

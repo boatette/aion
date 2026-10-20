@@ -111,6 +111,12 @@ pub fn updateCursor() void {
     server.cursor.setXcursor(xcursor, "default");
 }
 
+pub fn setXwaylandCursor(x: *wlr.Xwayland) void {
+    const xc = xcursor.getXcursor("default", 1) orelse return;
+    const img = xc.images[0];
+    x.setCursor(img.getBuffer(), @intCast(img.hotspot_x), @intCast(img.hotspot_y));
+}
+
 pub fn clientGone(cl: *Client) void {
     if (grabc == cl) {
         grabc = null;
@@ -368,7 +374,7 @@ pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx_in: f64, dy_in: f64
 }
 
 fn pointerFocus(cl: ?*Client, s: ?*wlr.Surface, sx: f64, sy: f64, time: u32) void {
-    if (config.sloppyfocus and time != 0 and cl != null and s != server.seat.pointer_state.focused_surface)
+    if (config.sloppyfocus and time != 0 and cl != null and !cl.?.unmanaged() and s != server.seat.pointer_state.focused_surface)
         server.focus(cl, false);
     const surf = s orelse {
         server.seat.pointerNotifyClearFocus();
@@ -387,8 +393,12 @@ fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.even
             if (locked) {} else {
                 const hit = server.hitTest(server.cursor.x, server.cursor.y);
                 if (hit.client) |cl| {
-                    server.focus(cl, true);
-                    if (cl.tiled()) scroll.reveal(cl);
+                    if (cl.unmanaged()) {
+                        keyboardEnter(cl.surface());
+                    } else {
+                        server.focus(cl, true);
+                        if (cl.tiled()) scroll.reveal(cl);
+                    }
                 } else if (hit.layer) |l| {
                     if (l.layer_surface.current.keyboard_interactive != .none) keyboardEnter(l.layer_surface.surface);
                 }
@@ -561,7 +571,7 @@ pub fn grab(mode: CursorMode) void {
     if (cursor_mode != .pressed) return;
     const hit = server.hitTest(server.cursor.x, server.cursor.y);
     const cl = hit.client orelse return;
-    if (cl.fullscreen) return;
+    if (cl.fullscreen or cl.unmanaged()) return;
     grabc = cl;
     cl.setFloating(true);
     cursor_mode = mode;

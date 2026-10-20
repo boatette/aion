@@ -201,7 +201,7 @@ pub fn remove(cl: *Client) void {
 /// Size for a window's first configure, before it is mapped.
 pub fn initialSize(cl: *const Client) [2]i32 {
     const m = server.selmon orelse return .{ 0, 0 };
-    if (cl.parent() != null or Client.ruleFloating(cl) or m.layout().arrange == null) return .{ 0, 0 };
+    if (cl.floatType() or Client.ruleFloating(cl) or m.layout().arrange == null) return .{ 0, 0 };
     const bw = 2 * config.borderpx;
     if (!isScrolling(m)) return .{ m.w.width - bw, m.w.height - bw };
     return .{ columnWidth(cl, m) - bw, m.w.height - bw };

@@ -12,6 +12,7 @@ const input = @import("input.zig");
 const Client = @import("Client.zig");
 const Monitor = @import("Monitor.zig");
 const LayerSurface = @import("LayerSurface.zig");
+const build_options = @import("build_options");
 
 pub const Layer = enum { bg, bottom, tile, float, top, fs, overlay, block };
 
@@ -39,6 +40,7 @@ xdg_shell: *wlr.XdgShell,
 layer_shell: *wlr.LayerShellV1,
 seat: *wlr.Seat,
 cursor: *wlr.Cursor,
+xwayland: ?*wlr.Xwayland = null,
 
 monitors: wl.list.Head(Monitor, .link),
 clients: wl.list.Head(Client, .link),
@@ -55,6 +57,8 @@ new_popup: wl.Listener(*wlr.XdgPopup) = .init(createPopup),
 new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) = .init(LayerSurface.create),
 new_decoration: wl.Listener(*wlr.XdgToplevelDecorationV1) = .init(Client.createDecoration),
 request_activate: wl.Listener(*wlr.XdgActivationV1.event.RequestActivate) = .init(Client.requestActivate),
+xwayland_ready: wl.Listener(void) = .init(xwaylandReady),
+new_xwayland_surface: wl.Listener(*wlr.XwaylandSurface) = .init(Client.createX11),
 renderer_lost: wl.Listener(void) = .init(rendererLost),
 
 pub fn init(s: *Server) !void {
@@ -127,6 +131,16 @@ pub fn init(s: *Server) !void {
     s.layer_shell.events.new_surface.add(&s.new_layer_surface);
     renderer.events.lost.add(&s.renderer_lost);
 
+    // Lazy: Xwayland only starts once an X11 client connects.
+    if (build_options.xwayland) {
+        if (wlr.Xwayland.create(wl_server, s.compositor, true)) |x| {
+            s.xwayland = x;
+            x.events.ready.add(&s.xwayland_ready);
+            x.events.new_surface.add(&s.new_xwayland_surface);
+            _ = c.setenv("DISPLAY", x.display_name, 1);
+        } else |_| log.err("could not set up Xwayland, continuing without it", .{});
+    }
+
     try Monitor.initManagers();
     try input.init();
     try @import("lock.zig").init();
@@ -150,6 +164,7 @@ pub fn start(s: *Server, startup: ?[*:0]const u8) !void {
 
 pub fn deinit(s: *Server) void {
     s.wl_server.destroyClients();
+    if (build_options.xwayland) if (s.xwayland) |x| x.destroy();
     s.backend.destroy();
     s.wl_server.destroy();
 }
@@ -254,6 +269,13 @@ fn opposite(dir: wlr.OutputLayout.Direction) wlr.OutputLayout.Direction {
 pub fn arrangeAll(s: *Server) void {
     var it = s.monitors.iterator(.forward);
     while (it.next()) |m| m.arrange();
+}
+
+fn xwaylandReady(_: *wl.Listener(void)) void {
+    const server = &@import("main.zig").server;
+    const x = server.xwayland orelse return;
+    x.setSeat(server.seat);
+    input.setXwaylandCursor(x);
 }
 
 fn layoutChange(_: *wl.Listener(*wlr.OutputLayout), _: *wlr.OutputLayout) void {
