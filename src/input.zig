@@ -38,6 +38,8 @@ var request_selection: wl.Listener(*wlr.Seat.event.RequestSetSelection) = .init(
 var request_start_drag: wl.Listener(*wlr.Seat.event.RequestStartDrag) = .init(onRequestStartDrag);
 var start_drag: wl.Listener(*wlr.Drag) = .init(onStartDrag);
 var drag_icon_destroy: wl.Listener(*wlr.Drag.Icon) = .init(onDragIconDestroy);
+var new_virtual_keyboard: wl.Listener(*wlr.VirtualKeyboardV1) = .init(onNewVirtualKeyboard);
+var new_virtual_pointer: wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer) = .init(onNewVirtualPointer);
 
 pub fn init() !void {
     const cursor = server.cursor;
@@ -59,8 +61,12 @@ pub fn init() !void {
 
     drag_icon_destroy.link.init();
     group = try wlr.KeyboardGroup.create();
+    try setKeymap(&group.keyboard);
     try group_keyboard.init(&group.keyboard);
     server.seat.setKeyboard(&group.keyboard);
+
+    (try wlr.VirtualKeyboardManagerV1.create(server.wl_server)).events.new_virtual_keyboard.add(&new_virtual_keyboard);
+    (try wlr.VirtualPointerManagerV1.create(server.wl_server)).events.new_virtual_pointer.add(&new_virtual_pointer);
     server.seat.setCapabilities(.{ .pointer = true, .keyboard = true });
 }
 
@@ -97,6 +103,16 @@ fn clean(mods: u32) u32 {
     return mods & ~caps;
 }
 
+fn setKeymap(kb: *wlr.Keyboard) !void {
+    const context = xkb.Context.new(.no_flags) orelse return error.XkbContext;
+    defer context.unref();
+    const keymap = xkb.Keymap.newFromNames(context, &config.xkb_rules, .no_flags) orelse return error.XkbKeymap;
+    defer keymap.unref();
+    _ = kb.setKeymap(keymap);
+    kb.setRepeatInfo(config.repeat_rate, config.repeat_delay);
+}
+
+/// Physical keyboards share one group; virtual keyboards keep their own keymap.
 const Keyboard = struct {
     kb: *wlr.Keyboard,
     syms: [2]xkb.Keysym = .{ .NoSymbol, .NoSymbol },
@@ -104,21 +120,24 @@ const Keyboard = struct {
     repeat_source: *wl.EventSource,
     key: wl.Listener(*wlr.Keyboard.event.Key) = .init(onKey),
     modifiers: wl.Listener(*wlr.Keyboard) = .init(onModifiers),
+    destroy: wl.Listener(*wlr.InputDevice) = .init(onDestroy),
 
     fn init(k: *Keyboard, kb: *wlr.Keyboard) !void {
-        const context = xkb.Context.new(.no_flags) orelse return error.XkbContext;
-        defer context.unref();
-        const keymap = xkb.Keymap.newFromNames(context, &config.xkb_rules, .no_flags) orelse return error.XkbKeymap;
-        defer keymap.unref();
-        _ = kb.setKeymap(keymap);
-        kb.setRepeatInfo(config.repeat_rate, config.repeat_delay);
-
         k.* = .{
             .kb = kb,
             .repeat_source = try server.wl_server.getEventLoop().addTimer(*Keyboard, repeat, k),
         };
         kb.events.key.add(&k.key);
         kb.events.modifiers.add(&k.modifiers);
+    }
+
+    fn onDestroy(listener: *wl.Listener(*wlr.InputDevice), _: *wlr.InputDevice) void {
+        const k: *Keyboard = @fieldParentPtr("destroy", listener);
+        k.key.link.remove();
+        k.modifiers.link.remove();
+        k.destroy.link.remove();
+        k.repeat_source.remove();
+        gpa.destroy(k);
     }
 
     fn binding(k: *Keyboard) ?*const actions.Key {
@@ -184,6 +203,21 @@ fn onNewInput(_: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void 
         },
         else => {},
     }
+}
+
+fn onNewVirtualKeyboard(_: *wl.Listener(*wlr.VirtualKeyboardV1), vkb: *wlr.VirtualKeyboardV1) void {
+    const k = gpa.create(Keyboard) catch return;
+    k.init(&vkb.keyboard) catch {
+        gpa.destroy(k);
+        return;
+    };
+    vkb.keyboard.base.events.destroy.add(&k.destroy);
+}
+
+fn onNewVirtualPointer(_: *wl.Listener(*wlr.VirtualPointerManagerV1.event.NewPointer), event: *wlr.VirtualPointerManagerV1.event.NewPointer) void {
+    const device = &event.new_pointer.pointer.base;
+    server.cursor.attachInputDevice(device);
+    if (event.suggested_output) |output| server.cursor.mapInputToOutput(device, output);
 }
 
 fn configurePointer(device: *wlr.InputDevice) void {

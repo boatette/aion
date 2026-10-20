@@ -99,6 +99,10 @@ pub fn tiled(cl: *const Client) bool {
     return !cl.floating and !cl.fullscreen;
 }
 
+pub fn pid(cl: *const Client) i32 {
+    return cl.toplevel.base.client.client.getCredentials().pid;
+}
+
 pub fn close(cl: *Client) void {
     cl.toplevel.sendClose();
 }

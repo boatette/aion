@@ -1,3 +1,4 @@
+const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 const c = @import("c");
 const a = @import("actions.zig");
@@ -66,13 +67,71 @@ pub const accel_profile = c.LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
 pub const accel_speed = 0.0;
 pub const button_map = c.LIBINPUT_CONFIG_TAP_MAP_LRM;
 
+const LEFT = @intFromEnum(wlr.OutputLayout.Direction.left);
+const RIGHT = @intFromEnum(wlr.OutputLayout.Direction.right);
+const UP = @intFromEnum(wlr.OutputLayout.Direction.up);
+const DOWN = @intFromEnum(wlr.OutputLayout.Direction.down);
+
+/// Mod+N views tag N, Mod+Shift+N moves the window there and follows, Mod+Ctrl+N moves it quietly.
+fn tagkeys(comptime sym: xkb.Keysym, comptime i: u5) [3]a.Key {
+    return .{
+        .{ .mod = MOD, .sym = sym, .func = a.view, .arg = .{ .ui = 1 << i } },
+        .{ .mod = MOD | SHIFT, .sym = sym, .func = a.tagfollow, .arg = .{ .ui = 1 << i } },
+        .{ .mod = MOD | CTRL, .sym = sym, .func = a.tag, .arg = .{ .ui = 1 << i } },
+    };
+}
+
+/// The same action on a vim key and its arrow.
+fn both(comptime mod: u32, comptime vim: xkb.Keysym, comptime arrow: xkb.Keysym, comptime func: a.Func, comptime arg: a.Arg) [2]a.Key {
+    return .{
+        .{ .mod = mod, .sym = vim, .func = func, .arg = arg },
+        .{ .mod = mod, .sym = arrow, .func = func, .arg = arg },
+    };
+}
+
+fn chvt(comptime n: u32) a.Key {
+    return .{ .mod = CTRL | ALT, .sym = @enumFromInt(@intFromEnum(K.F1) + n - 1), .func = a.chvt, .arg = .{ .ui = n } };
+}
+
 pub const keys = [_]a.Key{
     .{ .mod = MOD, .sym = K.t, .func = a.spawn, .arg = a.cmd(&.{"foot"}) },
-    .{ .mod = MOD, .sym = K.q, .func = a.killclient },
+    .{ .mod = MOD, .sym = K.w, .func = a.spawn, .arg = a.cmd(&.{"qutebrowser"}) },
+    .{ .mod = MOD, .sym = K.e, .func = a.spawn, .arg = a.cmd(&.{"dolphin"}) },
+    .{ .mod = MOD | ALT, .sym = K.e, .func = a.spawn, .arg = a.cmd(&.{ "foot", "zsh", "-ic", "y; exec zsh" }) },
+    .{ .mod = CTRL | SHIFT, .sym = K.Escape, .func = a.spawn, .arg = a.cmd(&.{ "foot", "-e", "btop" }) },
     .{ .mod = ALT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = 1 } },
     .{ .mod = ALT | SHIFT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = -1 } },
+
+    .{ .mod = MOD, .sym = K.g, .func = a.view, .arg = .{ .ui = ~@as(u32, 0) } },
+    .{ .mod = MOD, .sym = K.q, .func = a.killclient },
+    .{ .mod = MOD | ALT, .sym = K.q, .func = a.forcekill },
+    .{ .mod = MOD, .sym = K.v, .func = a.togglefloating },
+    .{ .mod = MOD, .sym = K.p, .func = a.tag, .arg = .{ .ui = ~@as(u32, 0) } },
+
+    .{ .mod = MOD, .sym = K.a, .func = a.setlayout, .arg = .{ .v = &layouts[2] } },
+    .{ .mod = MOD | SHIFT, .sym = K.f, .func = a.togglefullscreen },
+    .{ .mod = MOD | CTRL, .sym = K.f, .func = a.togglefullscreen },
+    .{ .mod = MOD, .sym = K.o, .func = a.setlayout, .arg = .{ .v = null } },
+    .{ .mod = MOD | SHIFT, .sym = K.o, .func = a.setlayout, .arg = .{ .v = &layouts[1] } },
+    .{ .mod = MOD | CTRL, .sym = K.o, .func = a.setlayout, .arg = .{ .v = &layouts[0] } },
+
+    .{ .mod = MOD, .sym = K.Tab, .func = a.view, .arg = .{ .ui = 0 } },
     .{ .mod = CTRL | ALT, .sym = K.BackSpace, .func = a.quit },
-};
+} ++ both(MOD, K.h, K.Left, a.focusdir, .{ .ui = 0 }) ++
+    both(MOD, K.l, K.Right, a.focusdir, .{ .ui = 1 }) ++
+    both(MOD, K.k, K.Up, a.focusdir, .{ .ui = 2 }) ++
+    both(MOD, K.j, K.Down, a.focusdir, .{ .ui = 3 }) ++
+    both(MOD | CTRL, K.h, K.Left, a.focusmon, .{ .i = LEFT }) ++
+    both(MOD | CTRL, K.l, K.Right, a.focusmon, .{ .i = RIGHT }) ++
+    both(MOD | CTRL, K.k, K.Up, a.focusmon, .{ .i = UP }) ++
+    both(MOD | CTRL, K.j, K.Down, a.focusmon, .{ .i = DOWN }) ++
+    both(MOD | SHIFT | CTRL, K.h, K.Left, a.tagmon, .{ .i = LEFT }) ++
+    both(MOD | SHIFT | CTRL, K.l, K.Right, a.tagmon, .{ .i = RIGHT }) ++
+    both(MOD | SHIFT | CTRL, K.k, K.Up, a.tagmon, .{ .i = UP }) ++
+    both(MOD | SHIFT | CTRL, K.j, K.Down, a.tagmon, .{ .i = DOWN }) ++
+    tagkeys(K.@"1", 0) ++ tagkeys(K.@"2", 1) ++ tagkeys(K.@"3", 2) ++ tagkeys(K.@"4", 3) ++ tagkeys(K.@"5", 4) ++
+    tagkeys(K.@"6", 5) ++ tagkeys(K.@"7", 6) ++ tagkeys(K.@"8", 7) ++ tagkeys(K.@"9", 8) ++ tagkeys(K.@"0", 9) ++
+    [_]a.Key{ chvt(1), chvt(2), chvt(3), chvt(4), chvt(5), chvt(6), chvt(7), chvt(8), chvt(9), chvt(10), chvt(11), chvt(12) };
 
 pub const buttons = [_]a.Button{
     .{ .mod = MOD, .button = c.BTN_LEFT, .func = a.moveresize, .arg = .{ .ui = 0 } },
