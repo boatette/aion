@@ -495,7 +495,10 @@ fn onDestroy(listener: *wl.Listener(void)) void {
     gpa.destroy(cl);
 }
 
-fn onSetTitle(_: *wl.Listener(void)) void {}
+fn onSetTitle(listener: *wl.Listener(void)) void {
+    const cl: *Client = @fieldParentPtr("set_title", listener);
+    if (cl.mon) |m| if (cl == server.focustop(m)) @import("Bar.zig").redraw();
+}
 
 fn onRequestFullscreen(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("request_fullscreen", listener);
@@ -565,6 +568,7 @@ fn onSetHints(listener: *wl.Listener(void)) void {
     // XUrgencyHint
     cl.urgent = hints.flags & (1 << 8) != 0;
     if (cl.urgent) cl.setBorderColor(&config.urgentcolor);
+    @import("Bar.zig").redraw();
 }
 
 pub fn createDecoration(_: *wl.Listener(*wlr.XdgToplevelDecorationV1), deco: *wlr.XdgToplevelDecorationV1) void {
@@ -602,5 +606,6 @@ pub fn requestActivate(_: *wl.Listener(*wlr.XdgActivationV1.event.RequestActivat
     } else {
         cl.urgent = true;
         cl.setBorderColor(&config.urgentcolor);
+        @import("Bar.zig").redraw();
     }
 }

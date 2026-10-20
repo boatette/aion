@@ -12,6 +12,7 @@ const server = &@import("main.zig").server;
 const Client = @import("Client.zig");
 const LayerSurface = @import("LayerSurface.zig");
 const lock = @import("lock.zig");
+const Bar = @import("Bar.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -34,6 +35,7 @@ layers: [4]wl.list.Head(LayerSurface, .link) = undefined,
 lock_surface: ?*lock.LockSurface = null,
 /// Turned off by output power management; stays in the layout.
 asleep: bool = false,
+bar: Bar = undefined,
 
 frame: wl.Listener(*wlr.Output) = .init(onFrame),
 destroy: wl.Listener(*wlr.Output) = .init(onDestroy),
@@ -68,6 +70,7 @@ fn createInner(output: *wlr.Output) !void {
     };
     output.data = m;
     for (&m.layers) |*l| l.init();
+    try m.bar.init(m);
     m.fullscreen_bg.node.setEnabled(false);
 
     output.events.frame.add(&m.frame);
@@ -113,6 +116,7 @@ fn onDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     m.scene_output.destroy();
     m.close();
     m.fullscreen_bg.node.destroy();
+    m.bar.deinit();
     gpa.destroy(m);
 }
 
@@ -148,6 +152,12 @@ pub fn initManagers() !void {
     output_manager.events.apply.add(&manager_apply);
     output_manager.events.@"test".add(&manager_test);
     (try wlr.OutputPowerManagerV1.create(server.wl_server)).events.set_mode.add(&power_set_mode);
+}
+
+pub fn deinitManagers() void {
+    manager_apply.link.remove();
+    manager_test.link.remove();
+    power_set_mode.link.remove();
 }
 
 fn onManagerApply(_: *wl.Listener(*wlr.OutputConfigurationV1), config_: *wlr.OutputConfigurationV1) void {
@@ -241,12 +251,16 @@ pub fn updateAll() void {
         server.focus(server.focustop(sel), true);
     };
     publishConfig();
+    Bar.redraw();
 }
 
 /// Place layer surfaces and shrink the window area by their exclusive zones.
 pub fn arrangeLayers(m: *Monitor) void {
     if (!m.output.enabled) return;
     var usable = m.m;
+    const bar = Bar.reserved(m);
+    usable.y += bar;
+    usable.height -= bar;
     var i: usize = m.layers.len;
     while (i > 0) : (i -= 1) m.arrangeLayer(i - 1, &usable, true);
     if (!usable.equal(&m.w)) {
@@ -317,6 +331,8 @@ pub fn arrange(m: *Monitor) void {
 }
 
 pub fn setSymbol(m: *Monitor, s: []const u8) void {
+    if (std.mem.eql(u8, std.mem.sliceTo(&m.ltsymbol, 0), s)) return;
+    Bar.redraw();
     const n = @min(s.len, m.ltsymbol.len);
     @memcpy(m.ltsymbol[0..n], s[0..n]);
     m.ltsymbol[n] = 0;

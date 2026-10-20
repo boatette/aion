@@ -29,6 +29,13 @@ pub const focuscolor = a.color(rose);
 pub const urgentcolor = a.color(love);
 pub const fullscreen_bg = a.color(0x000000ff);
 
+pub const showbar = true;
+pub const fonts = [_][*:0]const u8{"monospace:size=12"};
+pub const bar_norm: a.Scheme = .{ .fg = subtle, .bg = base };
+pub const bar_sel: a.Scheme = .{ .fg = text, .bg = overlay };
+/// Prints one status line at a time; null reads the status from stdin.
+pub const status_cmd: ?a.Arg = null;
+
 pub const default_width: f32 = 0.5;
 pub const width_presets = [_]f32{ 1.0 / 3.0, 0.5, 2.0 / 3.0 };
 
@@ -115,6 +122,7 @@ pub const keys = [_]a.Key{
 
     .{ .mod = MOD, .sym = K.g, .func = a.view, .arg = .{ .ui = ~@as(u32, 0) } },
     .{ .mod = MOD, .sym = K.q, .func = a.killclient },
+    .{ .mod = MOD, .sym = K.b, .func = a.togglebar },
     .{ .mod = MOD | ALT, .sym = K.q, .func = a.forcekill },
     .{ .mod = MOD, .sym = K.v, .func = a.togglefloating },
     .{ .mod = MOD, .sym = K.p, .func = a.tag, .arg = .{ .ui = ~@as(u32, 0) } },
@@ -164,6 +172,13 @@ pub const keys = [_]a.Key{
     [_]a.Key{ chvt(1), chvt(2), chvt(3), chvt(4), chvt(5), chvt(6), chvt(7), chvt(8), chvt(9), chvt(10), chvt(11), chvt(12) };
 
 pub const buttons = [_]a.Button{
-    .{ .mod = MOD, .button = c.BTN_LEFT, .func = a.moveresize, .arg = .{ .ui = 0 } },
-    .{ .mod = MOD, .button = c.BTN_RIGHT, .func = a.moveresize, .arg = .{ .ui = 1 } },
+    .{ .click = .ltsymbol, .mod = 0, .button = c.BTN_LEFT, .func = a.setlayout, .arg = .{ .v = &layouts[0] } },
+    .{ .click = .ltsymbol, .mod = 0, .button = c.BTN_RIGHT, .func = a.setlayout, .arg = .{ .v = &layouts[2] } },
+    .{ .click = .title, .mod = 0, .button = c.BTN_MIDDLE, .func = a.centercolumn },
+    .{ .click = .client, .mod = MOD, .button = c.BTN_LEFT, .func = a.moveresize, .arg = .{ .ui = 0 } },
+    .{ .click = .client, .mod = MOD, .button = c.BTN_RIGHT, .func = a.moveresize, .arg = .{ .ui = 1 } },
+    .{ .click = .tagbar, .mod = 0, .button = c.BTN_LEFT, .func = a.view },
+    .{ .click = .tagbar, .mod = 0, .button = c.BTN_RIGHT, .func = a.toggleview },
+    .{ .click = .tagbar, .mod = MOD, .button = c.BTN_LEFT, .func = a.tag },
+    .{ .click = .tagbar, .mod = MOD, .button = c.BTN_RIGHT, .func = a.toggletag },
 };

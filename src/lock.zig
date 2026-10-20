@@ -27,6 +27,11 @@ pub fn init() !void {
     inhibit_manager.events.new_inhibitor.add(&new_inhibitor);
 }
 
+pub fn deinit() void {
+    new_lock.link.remove();
+    new_inhibitor.link.remove();
+}
+
 pub fn activity() void {
     idle_notifier.notifyActivity(server.seat);
 }

@@ -12,6 +12,7 @@ const input = @import("input.zig");
 const Client = @import("Client.zig");
 const Monitor = @import("Monitor.zig");
 const LayerSurface = @import("LayerSurface.zig");
+const Bar = @import("Bar.zig");
 const build_options = @import("build_options");
 
 pub const Layer = enum { bg, bottom, tile, float, top, fs, overlay, block };
@@ -20,6 +21,7 @@ pub const Layer = enum { bg, bottom, tile, float, top, fs, overlay, block };
 pub const Owner = union(enum) {
     client: *Client,
     layer: *LayerSurface,
+    bar: *Monitor,
 };
 
 const gpa = std.heap.c_allocator;
@@ -141,6 +143,7 @@ pub fn init(s: *Server) !void {
         } else |_| log.err("could not set up Xwayland, continuing without it", .{});
     }
 
+    _ = c.fcft_init(c.FCFT_LOG_COLORIZE_AUTO, false, c.FCFT_LOG_CLASS_ERROR);
     try Monitor.initManagers();
     try input.init();
     try @import("lock.zig").init();
@@ -150,6 +153,7 @@ pub fn start(s: *Server, startup: ?[*:0]const u8) !void {
     const socket = try s.wl_server.addSocketAuto(&s.socket);
     try s.backend.start();
     _ = c.setenv("WAYLAND_DISPLAY", socket.ptr, 1);
+    Bar.startStatus();
 
     // Startup commands run with the session environment the compositor sees.
     if (startup) |cmd| {
@@ -162,11 +166,24 @@ pub fn start(s: *Server, startup: ?[*:0]const u8) !void {
     input.updateCursor();
 }
 
+/// wlroots asserts that nothing still listens to an object it destroys, so
+/// every global listener is detached first.
 pub fn deinit(s: *Server) void {
+    Bar.stopStatus();
+    input.deinit();
+    @import("lock.zig").deinit();
+    Monitor.deinitManagers();
+    inline for (.{ &s.new_output, &s.layout_change, &s.new_toplevel, &s.new_popup, &s.new_layer_surface, &s.new_decoration, &s.request_activate, &s.renderer_lost }) |l| l.link.remove();
+    if (build_options.xwayland) if (s.xwayland) |x| {
+        s.xwayland_ready.link.remove();
+        s.new_xwayland_surface.link.remove();
+        x.destroy();
+    };
     s.wl_server.destroyClients();
-    if (build_options.xwayland) if (s.xwayland) |x| x.destroy();
     s.backend.destroy();
     s.wl_server.destroy();
+    s.scene.tree.node.destroy();
+    c.fcft_fini();
 }
 
 pub fn focustop(s: *Server, m: ?*Monitor) ?*Client {
@@ -189,6 +206,7 @@ pub fn focus(s: *Server, cl: ?*Client, lift: bool) void {
         new.setBorderColor(&config.focuscolor);
     }
 
+    Bar.redraw();
     // The client gets the keyboard once the layer surface holding it closes.
     if (s.exclusive_focus != null) return;
 
@@ -214,6 +232,7 @@ pub const Hit = struct {
     surface: ?*wlr.Surface = null,
     client: ?*Client = null,
     layer: ?*LayerSurface = null,
+    bar: ?*Monitor = null,
     sx: f64 = 0,
     sy: f64 = 0,
 };
@@ -240,6 +259,7 @@ pub fn hitTest(s: *Server, x: f64, y: f64) Hit {
             switch (owner.*) {
                 .client => |cl| hit.client = cl,
                 .layer => |l| hit.layer = l,
+                .bar => |m| hit.bar = m,
             }
             break;
         }

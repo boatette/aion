@@ -25,6 +25,7 @@ pub const Arg = extern union {
 };
 
 pub const Func = *const fn (*const Arg) void;
+pub const Scheme = @import("Bar.zig").Scheme;
 
 pub const Key = struct {
     mod: u32,
@@ -36,6 +37,7 @@ pub const Key = struct {
 };
 
 pub const Button = struct {
+    click: @import("Bar.zig").Click = .client,
     mod: u32,
     button: u32,
     func: Func,
@@ -112,6 +114,7 @@ pub fn resetChild() void {
     var set: c.sigset_t = undefined;
     _ = c.sigemptyset(&set);
     _ = c.sigprocmask(c.SIG_SETMASK, &set, null);
+    _ = c.signal(c.SIGPIPE, c.SIG_DFL);
 }
 
 pub fn quit(_: *const Arg) void {
@@ -148,7 +151,7 @@ pub fn focus(cl: *Client) void {
     if (cl.tiled()) scroll.reveal(cl);
 }
 
-fn tagmask() u32 {
+pub fn tagmask() u32 {
     return (@as(u32, 1) << config.tags.len) - 1;
 }
 
@@ -262,6 +265,13 @@ pub fn togglefloating(_: *const Arg) void {
     sel.stacked = false;
     sel.setFloating(!sel.floating);
     if (sel.tiled()) scroll.reveal(sel);
+}
+
+pub fn togglebar(_: *const Arg) void {
+    const m = server.selmon orelse return;
+    m.bar.shown = !m.bar.shown;
+    m.arrangeLayers();
+    @import("Bar.zig").redraw();
 }
 
 pub fn togglefullscreen(_: *const Arg) void {

@@ -111,6 +111,7 @@ pub fn build(b: *Build) void {
         .optimize = optimize,
     });
     c.linkSystemLibrary("libinput", .{});
+    c.linkSystemLibrary("fcft", .{});
     // Nix has no /usr/include. The flake exports these; other systems use the compiler default.
     if (b.graph.environ_map.get("AION_LIBC_INCLUDE")) |path| c.addAfterIncludePath(.{ .cwd_relative = path });
     if (b.graph.environ_map.get("AION_LINUX_HEADERS")) |path| c.addAfterIncludePath(.{ .cwd_relative = path });
@@ -132,7 +133,7 @@ pub fn build(b: *Build) void {
     mod.addImport("pixman", pixman);
     mod.addImport("wlroots", wlroots);
     mod.addImport("c", c.mod);
-    for ([_][]const u8{ "wayland-server", "wlroots-0.20", "xkbcommon", "pixman-1", "libinput" }) |lib|
+    for ([_][]const u8{ "wayland-server", "wlroots-0.20", "xkbcommon", "pixman-1", "libinput", "fcft" }) |lib|
         mod.linkSystemLibrary(lib, .{});
 
     b.installArtifact(exe);

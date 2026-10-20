@@ -18,6 +18,20 @@ fn write(fd: c_int, s: []const u8) void {
     _ = c.write(fd, s.ptr, s.len);
 }
 
+fn quitSignal(_: std.posix.SIG) callconv(.c) void {
+    server.wl_server.terminate();
+}
+
+fn setupSignals() void {
+    const posix = std.posix;
+    const quit: posix.Sigaction = .{ .handler = .{ .handler = quitSignal }, .mask = posix.sigemptyset(), .flags = posix.SA.RESTART };
+    posix.sigaction(.INT, &quit, null);
+    posix.sigaction(.TERM, &quit, null);
+    // A status command exiting must not take the compositor with it.
+    const ignore: posix.Sigaction = .{ .handler = .{ .handler = posix.SIG.IGN }, .mask = posix.sigemptyset(), .flags = 0 };
+    posix.sigaction(.PIPE, &ignore, null);
+}
+
 pub fn main(init: std.process.Init.Minimal) !void {
     var startup: ?[*:0]const u8 = null;
     var debug = false;
@@ -43,6 +57,7 @@ pub fn main(init: std.process.Init.Minimal) !void {
     wlr.log.init(if (debug) .debug else .err, null);
 
     try server.init();
+    setupSignals();
     defer server.deinit();
     try server.start(startup);
     server.wl_server.run();

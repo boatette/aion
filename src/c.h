@@ -1,3 +1,5 @@
+#include <fcft/fcft.h>
+#include <fcntl.h>
 #include <libinput.h>
 #include <linux/input-event-codes.h>
 #include <signal.h>

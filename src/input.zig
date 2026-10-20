@@ -11,6 +11,7 @@ const server = &@import("main.zig").server;
 const Client = @import("Client.zig");
 const Monitor = @import("Monitor.zig");
 const lock = @import("lock.zig");
+const Bar = @import("Bar.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -101,6 +102,21 @@ pub fn init() !void {
     (try wlr.VirtualKeyboardManagerV1.create(server.wl_server)).events.new_virtual_keyboard.add(&new_virtual_keyboard);
     (try wlr.VirtualPointerManagerV1.create(server.wl_server)).events.new_virtual_pointer.add(&new_virtual_pointer);
     server.seat.setCapabilities(.{ .pointer = true, .keyboard = true });
+}
+
+pub fn deinit() void {
+    inline for (.{
+        &new_input,         &motion,               &motion_absolute,           &button,            &axis,
+        &frame,             &swipe_begin,          &swipe_update,              &swipe_end,         &pinch_begin,
+        &pinch_update,      &pinch_end,            &hold_begin,                &hold_end,          &request_cursor,
+        &request_selection, &request_start_drag,   &request_primary_selection, &start_drag,        &request_shape,
+        &new_constraint,    &new_virtual_keyboard, &new_virtual_pointer,       &drag_icon_destroy,
+    }) |l| l.link.remove();
+    group_keyboard.key.link.remove();
+    group_keyboard.modifiers.link.remove();
+    group_keyboard.repeat_source.remove();
+    group.destroy();
+    xcursor.destroy();
 }
 
 pub fn loadCursorScale(scale: f32) void {
@@ -402,10 +418,13 @@ fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.even
                 } else if (hit.layer) |l| {
                     if (l.layer_surface.current.keyboard_interactive != .none) keyboardEnter(l.layer_surface.surface);
                 }
+                var tag: u32 = 0;
+                const click: Bar.Click = if (hit.bar) |m| Bar.clickAt(m, server.cursor.x, &tag) else if (hit.client != null) .client else .root;
                 const mods = clean(modifiers());
                 for (&config.buttons) |*b| {
-                    if (mods == clean(b.mod) and event.button == b.button) {
-                        b.func(&b.arg);
+                    if (mods == clean(b.mod) and event.button == b.button and click == b.click) {
+                        // Tag bar buttons without their own argument act on the clicked tag.
+                        b.func(if (click == .tagbar and b.arg.ui == 0) &.{ .ui = tag } else &b.arg);
                         return;
                     }
                 }

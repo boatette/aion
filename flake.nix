@@ -33,6 +33,7 @@
           ];
 
           buildInputs = [
+            pkgs.fcft
             pkgs.libinput
             pkgs.libxkbcommon
             pkgs.pixman
