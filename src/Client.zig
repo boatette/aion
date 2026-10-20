@@ -454,7 +454,18 @@ fn onMap(listener: *wl.Listener(void)) void {
         cl.floating = cl.floatType();
         applyRules(cl);
     }
-    if (cl.tiled()) scroll.reveal(cl);
+    if (cl.tiled()) {
+        scroll.reveal(cl);
+    } else if (cl.mon) |m| {
+        // Floating windows open centred on their monitor, unless an X11 app placed itself.
+        const placed = cl.shell == .x11 and (cl.geom.x != 0 or cl.geom.y != 0);
+        if (!placed and !cl.fullscreen) cl.resize(.{
+            .x = m.w.x + @divTrunc(m.w.width - cl.geom.width, 2),
+            .y = m.w.y + @divTrunc(m.w.height - cl.geom.height, 2),
+            .width = cl.geom.width,
+            .height = cl.geom.height,
+        }, false);
+    }
 }
 
 fn onUnmap(listener: *wl.Listener(void)) void {

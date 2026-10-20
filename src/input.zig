@@ -369,7 +369,13 @@ pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx_in: f64, dy_in: f64
         relative_pointer.sendRelativeMotion(server.seat, @as(u64, time) * 1000, dx, dy, dx_unaccel, dy_unaccel);
         if (constrain(&dx, &dy)) return;
         cursor.move(device, dx, dy);
-        if (config.sloppyfocus) server.selmon = monAt(cursor.x, cursor.y) orelse server.selmon;
+        if (config.sloppyfocus) {
+            const m = monAt(cursor.x, cursor.y) orelse server.selmon;
+            if (m != server.selmon) {
+                server.selmon = m;
+                Bar.redraw();
+            }
+        }
     }
     server.drag_icons.node.setPosition(@intFromFloat(@round(cursor.x)), @intFromFloat(@round(cursor.y)));
 

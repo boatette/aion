@@ -179,6 +179,7 @@ fn applyConfig(cfg: *wlr.OutputConfigurationV1, test_only: bool) void {
         defer state.finish();
         head.state.apply(&state);
         ok = ok and if (test_only) output.testState(&state) else output.commitState(&state);
+        if (!test_only) input.loadCursorScale(output.scale);
         // Re-adding an output that didn't move would mark it manually placed.
         if (!test_only and output.enabled and (m.m.x != head.state.x or m.m.y != head.state.y))
             _ = server.output_layout.add(output, head.state.x, head.state.y) catch {};

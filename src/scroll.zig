@@ -133,7 +133,13 @@ pub fn arrange(m: *Monitor) void {
     }
 
     var buf: [16]u8 = undefined;
-    m.setSymbol(if (n == 0) "[S]" else std.fmt.bufPrint(&buf, "[{d}/{d}]", .{ focused, n }) catch "[S]");
+    const symbol = if (n == 0)
+        "[S]"
+    else if (focused == 0)
+        std.fmt.bufPrint(&buf, "[-/{d}]", .{n}) catch "[S]"
+    else
+        std.fmt.bufPrint(&buf, "[{d}/{d}]", .{ focused, n }) catch "[S]";
+    m.setSymbol(symbol);
 }
 
 pub fn monocle(m: *Monitor) void {
