@@ -156,7 +156,16 @@ pub fn clientGone(cl: *Client) void {
 
 pub fn keyboardEnter(s: *wlr.Surface) void {
     if (server.seat.getKeyboard()) |kb| {
-        server.seat.keyboardNotifyEnter(s, kb.keycodes[0..kb.num_keycodes], &kb.modifiers);
+        // Leave out keys a binding took: their release never reaches the
+        // client, so it would think they stay held and repeat them.
+        var keycodes: [32]u32 = undefined;
+        var n: usize = 0;
+        for (kb.keycodes[0..kb.num_keycodes]) |keycode| {
+            if (keycode < consumed.capacity() and consumed.isSet(keycode)) continue;
+            keycodes[n] = keycode;
+            n += 1;
+        }
+        server.seat.keyboardNotifyEnter(s, keycodes[0..n], &kb.modifiers);
     } else {
         server.seat.keyboardNotifyEnter(s, &.{}, null);
     }
