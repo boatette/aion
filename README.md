@@ -42,7 +42,8 @@ debug output.
 }
 ```
 
-The module adds an `aion` session for display managers, an
+The module adds an `aion` session for display managers, an `aion-session`
+command for starting it from a TTY (`exec aion-session` in a login shell), an
 `aion-session.target` for user services, and the usual Wayland session pieces
 (portals, polkit, Xwayland). The package also takes `enableXWayland` and
 `release` (`fast`, `safe` or `small`).
@@ -54,9 +55,9 @@ input settings, keys, mouse buttons, wheel bindings and gestures. Copy it,
 change it, and pass it as `configFile`. Nix's `replaceVars` works on it the same
 way it does on a dwl `config.h`.
 
-The default config expects these helpers on `PATH`: `dwl-status`, `dwl-apps`,
-`dwl-power`, `dwl-volume`, `dwl-brightness`, `dwl-screenshot` and
-`dwl-caffeine`.
+The default config expects these helpers on `PATH`: `aion-status`, `aion-apps`,
+`aion-power`, `aion-volume`, `aion-brightness`, `aion-screenshot` and
+`aion-caffeine`.
 
 The bar reads one status line at a time from `status_cmd`'s output, or from
 stdin if `status_cmd` is `null`.

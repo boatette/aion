@@ -35,14 +35,14 @@ pub const fonts = [_][*:0]const u8{ "JetBrainsMono Nerd Font:size=12", "monospac
 pub const bar_norm: a.Scheme = .{ .fg = subtle, .bg = base };
 pub const bar_sel: a.Scheme = .{ .fg = text, .bg = overlay };
 /// Prints one status line at a time; null reads the status from stdin.
-pub const status_cmd: ?a.Arg = a.cmd(&.{"dwl-status"});
+pub const status_cmd: ?a.Arg = a.cmd(&.{"aion-status"});
 
 /// Mod+d launcher: apps_cmd lists "Name<TAB>path" lines, launch_cmd plus the path starts one.
-pub const apps_cmd = a.cmd(&.{"dwl-apps"});
-pub const launch_cmd = [_][:0]const u8{ "dwl-apps", "launch" };
+pub const apps_cmd = a.cmd(&.{"aion-apps"});
+pub const launch_cmd = [_][:0]const u8{ "aion-apps", "launch" };
 
 /// Mod+x, then one key: session actions. Any other key leaves the mode.
-const power = "dwl-power";
+const power = "aion-power";
 pub const session_keys = [_]a.Key{
     .{ .mod = 0, .sym = K.l, .func = a.spawn, .arg = a.cmd(&.{ power, "lock" }) },
     .{ .mod = 0, .sym = K.u, .func = a.spawn, .arg = a.cmd(&.{ power, "suspend" }) },
@@ -141,7 +141,7 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD | SHIFT, .sym = K.d, .func = a.spawn, .arg = a.cmd(&.{"tofi-drun"}) },
     .{ .mod = MOD, .sym = K.x, .func = menu.session },
     .{ .mod = MOD | SHIFT, .sym = K.x, .func = a.spawn, .arg = a.cmd(&.{power}) },
-    .{ .mod = MOD, .sym = K.i, .func = a.spawn, .arg = a.cmd(&.{"dwl-caffeine"}) },
+    .{ .mod = MOD, .sym = K.i, .func = a.spawn, .arg = a.cmd(&.{"aion-caffeine"}) },
     .{ .mod = ALT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = 1 } },
     .{ .mod = ALT | SHIFT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = -1 } },
 
@@ -177,17 +177,17 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD, .sym = K.Tab, .func = a.view, .arg = .{ .ui = 0 } },
 
     // These also work while locked.
-    helper(0, K.XF86AudioRaiseVolume, &.{ "dwl-volume", "up" }),
-    helper(0, K.XF86AudioLowerVolume, &.{ "dwl-volume", "down" }),
-    helper(0, K.XF86AudioMute, &.{ "dwl-volume", "mute" }),
-    helper(0, K.XF86AudioMicMute, &.{ "dwl-volume", "mic-mute" }),
-    helper(0, K.XF86MonBrightnessUp, &.{ "dwl-brightness", "up" }),
-    helper(0, K.XF86MonBrightnessDown, &.{ "dwl-brightness", "down" }),
-    helper(ALT, K.XF86MonBrightnessUp, &.{ "dwl-brightness", "up", "1" }),
-    helper(ALT, K.XF86MonBrightnessDown, &.{ "dwl-brightness", "down", "1" }),
+    helper(0, K.XF86AudioRaiseVolume, &.{ "aion-volume", "up" }),
+    helper(0, K.XF86AudioLowerVolume, &.{ "aion-volume", "down" }),
+    helper(0, K.XF86AudioMute, &.{ "aion-volume", "mute" }),
+    helper(0, K.XF86AudioMicMute, &.{ "aion-volume", "mic-mute" }),
+    helper(0, K.XF86MonBrightnessUp, &.{ "aion-brightness", "up" }),
+    helper(0, K.XF86MonBrightnessDown, &.{ "aion-brightness", "down" }),
+    helper(ALT, K.XF86MonBrightnessUp, &.{ "aion-brightness", "up", "1" }),
+    helper(ALT, K.XF86MonBrightnessDown, &.{ "aion-brightness", "down", "1" }),
 
-    .{ .mod = 0, .sym = K.Print, .func = a.spawn, .arg = a.cmd(&.{ "dwl-screenshot", "full" }) },
-    .{ .mod = MOD | SHIFT, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ "dwl-screenshot", "region" }) },
+    .{ .mod = 0, .sym = K.Print, .func = a.spawn, .arg = a.cmd(&.{ "aion-screenshot", "full" }) },
+    .{ .mod = MOD | SHIFT, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ "aion-screenshot", "region" }) },
 
     .{ .mod = CTRL | ALT, .sym = K.BackSpace, .func = a.quit },
 } ++ both(MOD, K.h, K.Left, a.focusdir, .{ .ui = @intFromEnum(a.Dir.left) }) ++
