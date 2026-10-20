@@ -183,9 +183,11 @@ pub fn view(arg: *const Arg) void {
     const m = server.selmon orelse return;
     const t = arg.ui & tagmask();
     if (t == m.tags()) return;
+    const a = scroll.placement(m);
     m.seltags ^= 1;
     if (t != 0) m.tagset[m.seltags] = t;
     server.focus(server.focustop(m), true);
+    scroll.keep(m, a);
     m.arrange();
 }
 
@@ -193,8 +195,10 @@ pub fn toggleview(arg: *const Arg) void {
     const m = server.selmon orelse return;
     const t = m.tags() ^ (arg.ui & tagmask());
     if (t == 0) return;
+    const a = scroll.placement(m);
     m.tagset[m.seltags] = t;
     server.focus(server.focustop(m), true);
+    scroll.keep(m, a);
     m.arrange();
 }
 

@@ -179,6 +179,24 @@ pub fn center(cl: *Client) void {
     m.arrange();
 }
 
+/// Where the focused column sits on screen, so a view change can keep it there.
+pub const Placement = struct { cl: *Client, left: i32 };
+
+pub fn placement(m: *Monitor) ?Placement {
+    if (!isScrolling(m)) return null;
+    const cl = server.focustop(m) orelse return null;
+    const col = columnOf(cl) orelse return null;
+    return .{ .cl = cl, .left = col.x - m.scroll[slot(m)] };
+}
+
+/// A window shown in both views stays put instead of taking the new view's scroll.
+pub fn keep(m: *Monitor, a: ?Placement) void {
+    const an = a orelse return;
+    if (!isScrolling(m) or server.focustop(m) != an.cl) return;
+    const col = columnOf(an.cl) orelse return;
+    m.scroll[slot(m)] = col.x - an.left;
+}
+
 /// New windows open as a column right after the focused one.
 pub fn insert(cl: *Client) void {
     if (server.focustop(server.selmon)) |sel| {
