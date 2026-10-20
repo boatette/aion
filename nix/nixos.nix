@@ -12,7 +12,7 @@ let
 
   # Environment first, then aion, which hands the session over to systemd
   # and D-Bus once WAYLAND_DISPLAY exists.
-  session = pkgs.writeShellScript "aion-session" ''
+  session = pkgs.writeShellScriptBin "aion-session" ''
     export XDG_CURRENT_DESKTOP=aion
     export XDG_SESSION_DESKTOP=aion
     export XDG_SESSION_TYPE=wayland
@@ -27,7 +27,7 @@ let
       [Desktop Entry]
       Name=aion
       Comment=A dwl-like scrolling Wayland compositor
-      Exec=${session}
+      Exec=${lib.getExe session}
       Type=Application
       DesktopNames=aion
     '';
@@ -60,7 +60,10 @@ in
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       {
-        environment.systemPackages = [ cfg.package ];
+        environment.systemPackages = [
+          cfg.package
+          session
+        ];
 
         systemd.user.targets.aion-session = {
           description = "aion compositor session";
