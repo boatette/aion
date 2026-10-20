@@ -9,6 +9,7 @@ const input = @import("input.zig");
 const scroll = @import("scroll.zig");
 const server = &@import("main.zig").server;
 const Monitor = @import("Monitor.zig");
+const Server = @import("Server.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -16,6 +17,7 @@ const gpa = std.heap.c_allocator;
 link: wl.list.Link = undefined,
 /// Focus order, most recent first.
 flink: wl.list.Link = undefined,
+owner: Server.Owner = undefined,
 toplevel: *wlr.XdgToplevel,
 scene: *wlr.SceneTree = undefined,
 scene_surface: *wlr.SceneTree = undefined,
@@ -51,6 +53,7 @@ request_maximize: wl.Listener(void) = .init(onRequestMaximize),
 pub fn createXdg(_: *wl.Listener(*wlr.XdgToplevel), toplevel: *wlr.XdgToplevel) void {
     const cl = gpa.create(Client) catch return;
     cl.* = .{ .toplevel = toplevel };
+    cl.owner = .{ .client = cl };
     toplevel.base.data = cl;
     toplevel.base.surface.events.commit.add(&cl.commit);
     toplevel.base.surface.events.map.add(&cl.map);
@@ -117,6 +120,12 @@ pub fn setSuspended(cl: *Client, on: bool) void {
     if (cl.suspended == on) return;
     cl.suspended = on;
     _ = cl.toplevel.setSuspended(on);
+}
+
+/// Tiled windows are told so, which stops terminals snapping to whole cells.
+fn setTiled(cl: *Client, on: bool) void {
+    const all: wlr.Edges = .{ .top = true, .bottom = true, .left = true, .right = true };
+    _ = cl.toplevel.setTiled(if (on) all else .{});
 }
 
 pub fn setBorderColor(cl: *Client, color: *const [4]f32) void {
@@ -214,6 +223,7 @@ pub fn setFullscreen(cl: *Client, on: bool) void {
 
 pub fn setFloating(cl: *Client, on: bool) void {
     cl.floating = on;
+    cl.setTiled(!on);
     const m = cl.mon orelse return;
     if (!cl.surface().mapped or m.layout().arrange == null) return;
     const p = cl.parent();
@@ -277,6 +287,7 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         // don't draw once at a size they never keep.
         const size = scroll.initialSize(cl);
         _ = cl.toplevel.setSize(size[0], size[1]);
+        cl.setTiled(size[0] != 0);
         return;
     }
     if (cl.mon == null) return;
@@ -289,7 +300,7 @@ fn onMap(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("map", listener);
     cl.scene = server.layers.get(.tile).createSceneTree() catch return;
     cl.scene_surface = cl.scene.createSceneXdgSurface(cl.toplevel.base) catch return;
-    cl.scene.node.data = cl;
+    cl.scene.node.data = &cl.owner;
     cl.surface().data = cl.scene;
     for (&cl.border) |*b| b.* = cl.scene.createSceneRect(0, 0, &config.bordercolor) catch return;
 

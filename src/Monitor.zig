@@ -10,6 +10,7 @@ const actions = @import("actions.zig");
 const input = @import("input.zig");
 const server = &@import("main.zig").server;
 const Client = @import("Client.zig");
+const LayerSurface = @import("LayerSurface.zig");
 
 const gpa = std.heap.c_allocator;
 
@@ -27,6 +28,8 @@ sellt: u1 = 0,
 ltsymbol: [16:0]u8 = @splat(0),
 /// Horizontal scroll of the strip, per tag plus one for multi-tag views.
 scroll: [config.tags.len + 1]i32 = @splat(0),
+/// Layer surfaces per layer, background to overlay, newest first.
+layers: [4]wl.list.Head(LayerSurface, .link) = undefined,
 
 frame: wl.Listener(*wlr.Output) = .init(onFrame),
 destroy: wl.Listener(*wlr.Output) = .init(onDestroy),
@@ -60,6 +63,7 @@ fn createInner(output: *wlr.Output) !void {
         .lt = .{ rule.layout, &config.layouts[1] },
     };
     output.data = m;
+    for (&m.layers) |*l| l.init();
     m.fullscreen_bg.node.setEnabled(false);
 
     output.events.frame.add(&m.frame);
@@ -91,6 +95,10 @@ fn onRequestState(_: *wl.Listener(*wlr.Output.event.RequestState), event: *wlr.O
 
 fn onDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     const m: *Monitor = @fieldParentPtr("destroy", listener);
+    for (&m.layers) |*list| {
+        var lit = list.iterator(.forward);
+        while (lit.next()) |l| l.layer_surface.destroy();
+    }
     m.frame.link.remove();
     m.destroy.link.remove();
     m.request_state.link.remove();
@@ -153,6 +161,7 @@ pub fn updateAll() void {
         m.scene_output.setPosition(m.m.x, m.m.y);
         m.fullscreen_bg.node.setPosition(m.m.x, m.m.y);
         m.fullscreen_bg.setSize(m.m.width, m.m.height);
+        m.arrangeLayers();
         m.arrange();
         if (server.focustop(m)) |cl| if (cl.fullscreen) cl.resize(m.m, false);
     }
@@ -162,6 +171,41 @@ pub fn updateAll() void {
         while (cit.next()) |cl| if (cl.mon == null and cl.surface().mapped) cl.setMon(sel, cl.tags);
         server.focus(server.focustop(sel), true);
     };
+}
+
+/// Place layer surfaces and shrink the window area by their exclusive zones.
+pub fn arrangeLayers(m: *Monitor) void {
+    if (!m.output.enabled) return;
+    var usable = m.m;
+    var i: usize = m.layers.len;
+    while (i > 0) : (i -= 1) m.arrangeLayer(i - 1, &usable, true);
+    if (!usable.equal(&m.w)) {
+        m.w = usable;
+        m.arrange();
+    }
+    i = m.layers.len;
+    while (i > 0) : (i -= 1) m.arrangeLayer(i - 1, &usable, false);
+
+    for ([_]usize{ 3, 2 }) |li| {
+        var it = m.layers[li].iterator(.forward);
+        while (it.next()) |l| {
+            if (input.locked or l.layer_surface.current.keyboard_interactive == .none or !l.mapped) continue;
+            server.focus(null, false);
+            server.exclusive_focus = l;
+            input.keyboardEnter(l.layer_surface.surface);
+            return;
+        }
+    }
+}
+
+fn arrangeLayer(m: *Monitor, i: usize, usable: *wlr.Box, exclusive: bool) void {
+    var it = m.layers[i].iterator(.forward);
+    while (it.next()) |l| {
+        const ls = l.layer_surface;
+        if (!ls.initialized or exclusive != (ls.current.exclusive_zone > 0)) continue;
+        l.scene_layer.configure(&m.m, usable);
+        l.popups.node.setPosition(l.scene.node.x, l.scene.node.y);
+    }
 }
 
 pub fn tags(m: *const Monitor) u32 {

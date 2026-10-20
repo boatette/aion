@@ -350,6 +350,8 @@ fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.even
                 if (hit.client) |cl| {
                     server.focus(cl, true);
                     if (cl.tiled()) scroll.reveal(cl);
+                } else if (hit.layer) |l| {
+                    if (l.layer_surface.current.keyboard_interactive != .none) keyboardEnter(l.layer_surface.surface);
                 }
                 const mods = clean(modifiers());
                 for (&config.buttons) |*b| {

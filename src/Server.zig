@@ -11,8 +11,15 @@ const actions = @import("actions.zig");
 const input = @import("input.zig");
 const Client = @import("Client.zig");
 const Monitor = @import("Monitor.zig");
+const LayerSurface = @import("LayerSurface.zig");
 
 pub const Layer = enum { bg, bottom, tile, float, top, fs, overlay, block };
+
+/// What a scene node belongs to, stored in node.data.
+pub const Owner = union(enum) {
+    client: *Client,
+    layer: *LayerSurface,
+};
 
 const gpa = std.heap.c_allocator;
 
@@ -29,6 +36,7 @@ layers: std.EnumArray(Layer, *wlr.SceneTree),
 drag_icons: *wlr.SceneTree,
 root_bg: *wlr.SceneRect,
 xdg_shell: *wlr.XdgShell,
+layer_shell: *wlr.LayerShellV1,
 seat: *wlr.Seat,
 cursor: *wlr.Cursor,
 
@@ -36,12 +44,15 @@ monitors: wl.list.Head(Monitor, .link),
 clients: wl.list.Head(Client, .link),
 fstack: wl.list.Head(Client, .flink),
 selmon: ?*Monitor = null,
+/// A top or overlay layer surface that holds the keyboard, like a launcher.
+exclusive_focus: ?*LayerSurface = null,
 socket: [11]u8 = undefined,
 
 new_output: wl.Listener(*wlr.Output) = .init(Monitor.create),
 layout_change: wl.Listener(*wlr.OutputLayout) = .init(layoutChange),
 new_toplevel: wl.Listener(*wlr.XdgToplevel) = .init(Client.createXdg),
 new_popup: wl.Listener(*wlr.XdgPopup) = .init(createPopup),
+new_layer_surface: wl.Listener(*wlr.LayerSurfaceV1) = .init(LayerSurface.create),
 renderer_lost: wl.Listener(void) = .init(rendererLost),
 
 pub fn init(s: *Server) !void {
@@ -68,6 +79,7 @@ pub fn init(s: *Server) !void {
         .drag_icons = undefined,
         .root_bg = try scene.tree.createSceneRect(0, 0, &config.rootcolor),
         .xdg_shell = try wlr.XdgShell.create(wl_server, 6),
+        .layer_shell = try wlr.LayerShellV1.create(wl_server, 4),
         .seat = try wlr.Seat.create(wl_server, "seat0"),
         .cursor = try wlr.Cursor.create(),
         .monitors = undefined,
@@ -92,6 +104,7 @@ pub fn init(s: *Server) !void {
     output_layout.events.change.add(&s.layout_change);
     s.xdg_shell.events.new_toplevel.add(&s.new_toplevel);
     s.xdg_shell.events.new_popup.add(&s.new_popup);
+    s.layer_shell.events.new_surface.add(&s.new_layer_surface);
     renderer.events.lost.add(&s.renderer_lost);
 
     try input.init();
@@ -139,6 +152,9 @@ pub fn focus(s: *Server, cl: ?*Client, lift: bool) void {
         new.setBorderColor(&config.focuscolor);
     }
 
+    // The client gets the keyboard once the layer surface holding it closes.
+    if (s.exclusive_focus != null) return;
+
     if (old) |o| {
         if (Client.fromSurface(o)) |prev| {
             if (cl != prev) {
@@ -160,6 +176,7 @@ pub fn focus(s: *Server, cl: ?*Client, lift: bool) void {
 pub const Hit = struct {
     surface: ?*wlr.Surface = null,
     client: ?*Client = null,
+    layer: ?*LayerSurface = null,
     sx: f64 = 0,
     sy: f64 = 0,
 };
@@ -179,13 +196,15 @@ pub fn hitTest(s: *Server, x: f64, y: f64) Hit {
                 hit.sy = sy;
             }
         }
-        // Walk up to the tree that owns this node to find its client.
+        // Walk up to the tree that owns this node.
         var n: ?*wlr.SceneNode = node;
         while (n) |cur| : (n = if (cur.parent) |p| &p.node else null) {
-            if (cur.data) |data| {
-                hit.client = @ptrCast(@alignCast(data));
-                break;
+            const owner: *Owner = @ptrCast(@alignCast(cur.data orelse continue));
+            switch (owner.*) {
+                .client => |cl| hit.client = cl,
+                .layer => |l| hit.layer = l,
             }
+            break;
         }
         break;
     }
@@ -247,11 +266,17 @@ const Popup = struct {
         while (wlr.XdgSurface.tryFromWlrSurface(root)) |xs| {
             if (xs.role == .popup) root = xs.role_data.popup.?.parent orelse break else break;
         }
-        const cl = Client.fromSurface(root) orelse return;
-        const m = cl.mon orelse server.selmon orelse return;
-        box = m.m;
-        box.x -= cl.geom.x;
-        box.y -= cl.geom.y;
+        if (LayerSurface.fromSurface(root)) |l| {
+            box = l.mon.m;
+            box.x -= l.scene.node.x;
+            box.y -= l.scene.node.y;
+        } else {
+            const cl = Client.fromSurface(root) orelse return;
+            const m = cl.mon orelse server.selmon orelse return;
+            box = m.w;
+            box.x -= cl.geom.x;
+            box.y -= cl.geom.y;
+        }
         p.popup.unconstrainFromBox(&box);
     }
 
