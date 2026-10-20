@@ -305,11 +305,16 @@ pub fn chvt(arg: *const Arg) void {
     if (server.session) |s| s.changeVt(arg.ui) catch {};
 }
 
-/// SIGKILL the focused window's process, for apps that ignore a close.
+/// SIGKILL the focused window's process group, for apps that ignore a close. A
+/// lone pid isn't enough for apps like Steam, whose supervisor respawns a killed
+/// helper window.
 pub fn forcekill(_: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     const pid = sel.pid();
-    if (pid > 0) _ = c.kill(pid, c.SIGKILL);
+    if (pid <= 0) return;
+    const pgid = c.getpgid(pid);
+    if (pgid > 0 and pgid != c.getpgrp()) _ = c.kill(-pgid, c.SIGKILL);
+    _ = c.kill(pid, c.SIGKILL);
 }
 
 /// Nearest visible window in a direction, by distance between corners.
