@@ -28,6 +28,7 @@ pub const urgentcolor = a.color(love);
 pub const fullscreen_bg = a.color(0x000000ff);
 
 pub const default_width: f32 = 0.5;
+pub const width_presets = [_]f32{ 1.0 / 3.0, 0.5, 2.0 / 3.0 };
 
 pub const tags = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };
 
@@ -41,7 +42,15 @@ pub const monrules = [_]a.MonitorRule{
     .{},
 };
 
-pub const rules = [_]a.Rule{};
+/// app_id and title match as substrings. Dialogs with a parent float on their own.
+pub const rules = [_]a.Rule{
+    .{ .app_id = "xdg-desktop-portal-gtk", .floating = true },
+    .{ .app_id = "org.gtk.FileChooserDialog", .floating = true },
+    .{ .title = "Sign in - Google Accounts", .floating = true },
+    .{ .title = "Picture-in-Picture", .floating = true },
+    .{ .app_id = "io.bassi.Amberol", .floating = true },
+    .{ .app_id = "qimgv", .title = "dvp.webp", .tags = ~@as(u32, 0), .floating = true },
+};
 
 pub const xkb_rules: xkb.RuleNames = .{
     .rules = null,
@@ -108,6 +117,21 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD, .sym = K.v, .func = a.togglefloating },
     .{ .mod = MOD, .sym = K.p, .func = a.tag, .arg = .{ .ui = ~@as(u32, 0) } },
 
+    .{ .mod = MOD, .sym = K.c, .func = a.centercolumn },
+    .{ .mod = MOD, .sym = K.f, .func = a.togglefullwidth },
+    .{ .mod = MOD, .sym = K.r, .func = a.cyclewidth, .arg = .{ .i = 1 } },
+    .{ .mod = MOD | SHIFT, .sym = K.r, .func = a.cyclewidth, .arg = .{ .i = -1 } },
+    .{ .mod = MOD, .sym = K.minus, .func = a.setwidth, .arg = .{ .f = -0.05 } },
+    .{ .mod = MOD, .sym = K.equal, .func = a.setwidth, .arg = .{ .f = 0.05 } },
+    .{ .mod = MOD | SHIFT, .sym = K.minus, .func = a.setheight, .arg = .{ .f = -0.1 } },
+    .{ .mod = MOD | SHIFT, .sym = K.equal, .func = a.setheight, .arg = .{ .f = 0.1 } },
+    .{ .mod = MOD, .sym = K.bracketleft, .func = a.consumeorexpel, .arg = .{ .i = -1 } },
+    .{ .mod = MOD, .sym = K.bracketright, .func = a.consumeorexpel, .arg = .{ .i = 1 } },
+    .{ .mod = MOD, .sym = K.Home, .func = a.focusend, .arg = .{ .i = -1 } },
+    .{ .mod = MOD, .sym = K.End, .func = a.focusend, .arg = .{ .i = 1 } },
+    .{ .mod = MOD | SHIFT, .sym = K.Home, .func = a.movecolumnend, .arg = .{ .i = -1 } },
+    .{ .mod = MOD | SHIFT, .sym = K.End, .func = a.movecolumnend, .arg = .{ .i = 1 } },
+
     .{ .mod = MOD, .sym = K.a, .func = a.setlayout, .arg = .{ .v = &layouts[2] } },
     .{ .mod = MOD | SHIFT, .sym = K.f, .func = a.togglefullscreen },
     .{ .mod = MOD | CTRL, .sym = K.f, .func = a.togglefullscreen },
@@ -121,6 +145,10 @@ pub const keys = [_]a.Key{
     both(MOD, K.l, K.Right, a.focusdir, .{ .ui = 1 }) ++
     both(MOD, K.k, K.Up, a.focusdir, .{ .ui = 2 }) ++
     both(MOD, K.j, K.Down, a.focusdir, .{ .ui = 3 }) ++
+    both(MOD | SHIFT, K.h, K.Left, a.movecolumn, .{ .i = -1 }) ++
+    both(MOD | SHIFT, K.l, K.Right, a.movecolumn, .{ .i = 1 }) ++
+    both(MOD | SHIFT, K.k, K.Up, a.movewindow, .{ .i = -1 }) ++
+    both(MOD | SHIFT, K.j, K.Down, a.movewindow, .{ .i = 1 }) ++
     both(MOD | CTRL, K.h, K.Left, a.focusmon, .{ .i = LEFT }) ++
     both(MOD | CTRL, K.l, K.Right, a.focusmon, .{ .i = RIGHT }) ++
     both(MOD | CTRL, K.k, K.Up, a.focusmon, .{ .i = UP }) ++

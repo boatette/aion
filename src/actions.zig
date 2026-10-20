@@ -281,7 +281,7 @@ pub fn forcekill(_: *const Arg) void {
 pub const Dir = enum(u32) { left, right, up, down };
 
 /// Nearest visible window in a direction, by distance between corners.
-pub fn focusdir(arg: *const Arg) void {
+pub fn focusnearest(arg: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     if (sel.fullscreen) return;
     const dir: Dir = @enumFromInt(arg.ui);
@@ -304,4 +304,93 @@ pub fn focusdir(arg: *const Arg) void {
         }
     }
     if (best) |b| focus(b);
+}
+
+fn selTiled() ?*Client {
+    const m = server.selmon orelse return null;
+    const sel = server.focustop(m) orelse return null;
+    return if (sel.tiled() and scroll.isScrolling(m)) sel else null;
+}
+
+/// Move a window one place along the strip order; used outside the scroll layout.
+pub fn movestack(arg: *const Arg) void {
+    const sel = server.focustop(server.selmon) orelse return;
+    var link = &sel.link;
+    while (true) {
+        link = if (arg.i > 0) link.next.? else link.prev.?;
+        if (link == &sel.link) return;
+        if (link == &server.clients.link) continue;
+        const cl: *Client = @fieldParentPtr("link", link);
+        if (cl.visibleOn(server.selmon)) break;
+    }
+    sel.link.remove();
+    if (arg.i > 0) link.insert(&sel.link) else link.prev.?.insert(&sel.link);
+    server.selmon.?.arrange();
+}
+
+/// h/j/k/l: columns and windows in a column in the scroll layout, the stack
+/// in monocle, and the nearest window for floating ones.
+pub fn focusdir(arg: *const Arg) void {
+    const m = server.selmon orelse return;
+    const sel = server.focustop(m) orelse return;
+    const dir: Dir = @enumFromInt(arg.ui);
+    const step: i32 = if (dir == .left or dir == .up) -1 else 1;
+    if (m.layout().arrange == scroll.monocle) return focusstack(&.{ .i = step });
+    if (selTiled() == null) return focusnearest(arg);
+    switch (dir) {
+        .left, .right => if (scroll.neighbour(sel, step, false)) |col| focus(scroll.lastFocused(col)),
+        .up, .down => {
+            const col = scroll.columnOf(sel) orelse return;
+            var buf: [32]*Client = undefined;
+            const ms = scroll.members(col, &buf);
+            const i: i64 = @intCast(std.mem.indexOfScalar(*Client, ms, sel).?);
+            if (i + step >= 0 and i + step < ms.len) focus(ms[@intCast(i + step)]);
+        },
+    }
+}
+
+pub fn focusend(arg: *const Arg) void {
+    const sel = selTiled() orelse return;
+    if (scroll.neighbour(sel, arg.i, true)) |col| focus(scroll.lastFocused(col));
+}
+
+pub fn movecolumn(arg: *const Arg) void {
+    const sel = selTiled() orelse return movestack(arg);
+    scroll.moveColumn(sel, arg.i, false);
+}
+
+pub fn movecolumnend(arg: *const Arg) void {
+    const sel = selTiled() orelse return;
+    scroll.moveColumn(sel, arg.i, true);
+}
+
+pub fn movewindow(arg: *const Arg) void {
+    const sel = selTiled() orelse return movestack(arg);
+    scroll.moveWindow(sel, arg.i);
+}
+
+pub fn consumeorexpel(arg: *const Arg) void {
+    if (selTiled()) |sel| scroll.consumeOrExpel(sel, arg.i);
+}
+
+pub fn centercolumn(_: *const Arg) void {
+    if (selTiled()) |sel| scroll.center(sel);
+}
+
+pub fn setwidth(arg: *const Arg) void {
+    const sel = selTiled() orelse return;
+    const h = scroll.head(sel) orelse return;
+    scroll.setWidth(sel, h.width + arg.f);
+}
+
+pub fn cyclewidth(arg: *const Arg) void {
+    if (selTiled()) |sel| scroll.cycleWidth(sel, arg.i);
+}
+
+pub fn togglefullwidth(_: *const Arg) void {
+    if (selTiled()) |sel| scroll.toggleFullWidth(sel);
+}
+
+pub fn setheight(arg: *const Arg) void {
+    if (selTiled()) |sel| scroll.changeHeight(sel, arg.f);
 }
