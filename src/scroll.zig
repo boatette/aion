@@ -393,9 +393,22 @@ pub fn changeHeight(cl: *Client, delta: f32) void {
 
 var remainder: f64 = 0;
 
+/// A free scroll in progress. Travel counts what the clamped strip
+/// couldn't follow too, so a strip that fits on screen still moves focus.
+const Drag = struct { m: *Monitor, start: i32, focus: i32, travel: f64 = 0 };
+var drag: ?Drag = null;
+
+/// The strip position the focused column's middle is at, or the screen's middle.
+fn focusPoint(m: *Monitor) i32 {
+    if (server.focustop(m)) |cl| if (columnOf(cl)) |col| return col.x + @divTrunc(col.w, 2);
+    return m.scroll[slot(m)] + @divTrunc(m.w.width, 2);
+}
+
 /// Move the strip by delta pixels; positive shows more of the right side.
 pub fn scrollBy(m: *Monitor, delta: f64) void {
     if (!isScrolling(m)) return;
+    if (drag == null or drag.?.m != m) drag = .{ .m = m, .start = m.scroll[slot(m)], .focus = focusPoint(m) };
+    drag.?.travel += delta;
     remainder += delta;
     const whole = @trunc(remainder);
     if (whole == 0) return;
@@ -404,23 +417,44 @@ pub fn scrollBy(m: *Monitor, delta: f64) void {
     m.arrange();
 }
 
-/// After a free scroll: focus the column nearest the middle and bring it fully into view.
+/// The scroll nearest s that lines a column edge up with a screen edge
+/// and shows col fully.
+fn aligned(m: *Monitor, col: Column, s: i32, total: i32) i32 {
+    const hi = total - m.w.width;
+    var best = std.math.clamp(col.x, 0, hi);
+    var it = Columns.init(m);
+    while (it.next()) |other| {
+        for ([_]i32{ other.x, other.x + other.w - m.w.width }) |c| {
+            const cand = std.math.clamp(c, 0, hi);
+            if (cand > col.x or cand + m.w.width < col.x + col.w) continue;
+            if (@abs(cand - s) < @abs(best - s)) best = cand;
+        }
+    }
+    return best;
+}
+
+/// After a free scroll: focus the column the focused one was dragged onto,
+/// and line the strip up with its columns.
 pub fn snap(m: *Monitor) void {
     remainder = 0;
-    if (!isScrolling(m)) return;
-    const middle = m.scroll[slot(m)] + @divTrunc(m.w.width, 2);
+    const d = drag orelse return;
+    drag = null;
+    if (d.m != m or !isScrolling(m)) return;
+    const p = d.focus + @as(i32, @intFromFloat(@round(d.travel)));
     var best: ?Column = null;
     var best_dist: i32 = std.math.maxInt(i32);
     var it = Columns.init(m);
     while (it.next()) |col| {
-        const dist: i32 = @intCast(@abs(col.x + @divTrunc(col.w, 2) - middle));
+        const dist = if (p < col.x) col.x - p else if (p >= col.x + col.w) p - (col.x + col.w) + 1 else 0;
         if (dist < best_dist) {
             best_dist = dist;
             best = col;
         }
     }
     const col = best orelse return;
-    const cl = lastFocused(col);
-    server.focus(cl, true);
-    reveal(cl);
+    server.focus(lastFocused(col), true);
+    const s = &m.scroll[slot(m)];
+    // A strip that fits shows every column anyway; keep it where it was.
+    s.* = if (it.x <= m.w.width) d.start else aligned(m, col, s.*, it.x);
+    m.arrange();
 }
