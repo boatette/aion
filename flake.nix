@@ -33,8 +33,6 @@
           ];
 
           buildInputs = [
-            pkgs.libGL
-            pkgs.libevdev
             pkgs.libinput
             pkgs.libxkbcommon
             pkgs.pixman
@@ -42,10 +40,7 @@
             pkgs.wayland
             pkgs.wayland-protocols
             pkgs.wayland-scanner
-            pkgs.wlr-protocols
             pkgs.wlroots_0_20
-            pkgs.libxcb
-            pkgs.xwayland
           ];
 
           zigDeps = pkgs.zig.fetchDeps {
@@ -62,13 +57,6 @@
             AION_LIBC_INCLUDE = "${pkgs.glibc.dev}/include";
             AION_LINUX_HEADERS = "${pkgs.linuxHeaders}/include";
           };
-
-          zigBuildFlags = [
-            "-Dxwayland"
-            "-Dxwayland-path=${pkgs.xwayland}/bin/Xwayland"
-          ];
-
-          doCheck = true;
 
           doInstallCheck = true;
           nativeInstallCheckInputs = [ pkgs.versionCheckHook ];
@@ -88,21 +76,16 @@
         default = aion;
       });
 
-      nixosModules = rec {
-        aion = import ./nix/nixos.nix self;
-        default = aion;
-      };
-
       checks = forAllSystems (pkgs: {
         inherit (self.packages.${pkgs.stdenv.hostPlatform.system}) aion;
 
         zig-fmt = pkgs.runCommand "aion-zig-fmt" { nativeBuildInputs = [ pkgs.zig ]; } ''
-          zig fmt --check ${./build.zig} ${./src}
+          zig fmt --check ${./build.zig} ${./build.zig.zon} ${./src}
           touch $out
         '';
 
         nix-fmt = pkgs.runCommand "aion-nix-fmt" { } ''
-          ${pkgs.lib.getExe pkgs.nixfmt} --check ${./flake.nix} ${./nix/nixos.nix}
+          ${pkgs.lib.getExe pkgs.nixfmt} --check ${./flake.nix}
           touch $out
         '';
       });
@@ -112,15 +95,10 @@
         let
           libraries = with pkgs; [
             libGL
-            libdrm
-            libevdev
             libinput
-            libx11
-            libxcb
             libxkbcommon
             mesa
             pixman
-            seatd
             udev
             vulkan-loader
             wayland
@@ -131,14 +109,14 @@
           default = pkgs.mkShell {
             inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.aion ];
             packages = with pkgs; [
-              cage
-              drm_info
+              foot
               gdb
-              mesa-demos
+              grim
               nixfmt
-              vulkan-tools
               wayland-utils
               wev
+              wlr-randr
+              wtype
               zls
             ];
             env = {
