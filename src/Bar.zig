@@ -26,6 +26,8 @@ scale: f32 = 0,
 shown: bool = config.showbar,
 /// Height in layout coordinates, what windows make room for.
 height: i32 = 0,
+/// digest of what the current buffer shows
+drawn: u64 = 0,
 
 var status_buf: [512]u8 = undefined;
 var status_len: usize = 0;
@@ -58,6 +60,7 @@ fn loadFont(b: *Bar, scale: f32) void {
     for (config.fonts, 0..) |f, i| names[i] = f;
     b.font = c.fcft_from_name(names.len, &names, &attrs);
     b.scale = scale;
+    b.drawn = 0;
 }
 
 /// Room the bar takes at the top of the monitor, in layout coordinates.
@@ -252,9 +255,16 @@ pub fn draw(m: *Monitor) void {
     }
     b.loadFont(m.output.scale);
     const font = b.font orelse return;
-    const width: i32 = @intFromFloat(@ceil(@as(f32, @floatFromInt(m.m.width)) * b.scale));
+    const width = pixelWidth(m);
     const height: i32 = font.height + 2;
     if (width <= 0) return;
+    b.scene.setDestSize(m.m.width, b.height);
+    b.scene.node.setPosition(m.m.x, m.m.y);
+    b.scene.node.setEnabled(true);
+
+    // the menu isn't in the digest, so it draws every time while open
+    const key = digest(m, width, height);
+    if (key == b.drawn and !(m == server.selmon and menu.active())) return;
 
     const buf = Buffer.create(width, height) orelse return;
     const img = c.pixman_image_create_bits(c.PIXMAN_a8r8g8b8, width, height, buf.data.ptr, @intCast(buf.stride)) orelse {
@@ -267,9 +277,51 @@ pub fn draw(m: *Monitor) void {
 
     b.scene.setBuffer(&buf.base);
     buf.base.drop();
-    b.scene.setDestSize(m.m.width, b.height);
-    b.scene.node.setPosition(m.m.x, m.m.y);
-    b.scene.node.setEnabled(true);
+    b.drawn = key;
+}
+
+/// width of the bar's buffer in pixels
+fn pixelWidth(m: *const Monitor) i32 {
+    return @intFromFloat(@ceil(@as(f32, @floatFromInt(m.m.width)) * m.bar.scale));
+}
+
+const TagState = struct { occupied: u32 = 0, urgent: u32 = 0 };
+
+fn tagState(m: *const Monitor) TagState {
+    var t: TagState = .{};
+    var it = server.clients.iterator(.forward);
+    while (it.next()) |cl| {
+        if (cl.mon != m) continue;
+        if (cl.tags != actions.tagmask()) t.occupied |= cl.tags;
+        if (cl.urgent) t.urgent |= cl.tags;
+    }
+    return t;
+}
+
+/// hash of everything paint shows, so a redraw with nothing new is skipped
+fn digest(m: *Monitor, width: i32, height: i32) u64 {
+    const selected = m == server.selmon;
+    const sel = server.focustop(m);
+    const t = tagState(m);
+    const nums = [_]u32{
+        @bitCast(width),
+        @bitCast(height),
+        @intFromBool(selected),
+        @intFromBool(selected and menu.active()),
+        m.tags(),
+        t.occupied,
+        t.urgent,
+        if (sel) |cl| cl.tags else 0,
+        if (sel) |cl| @intFromBool(cl.floating) else 2,
+    };
+    var h: std.hash.Wyhash = .init(0);
+    h.update(std.mem.sliceAsBytes(&nums));
+    h.update(std.mem.sliceTo(&m.ltsymbol, 0));
+    h.update(&[_]u8{0});
+    if (selected) h.update(status());
+    h.update(&[_]u8{0});
+    if (sel) |cl| h.update(cl.title());
+    return h.final();
 }
 
 fn paint(m: *Monitor, p: *Painter, width: i32) void {
@@ -285,24 +337,16 @@ fn paint(m: *Monitor, p: *Painter, width: i32) void {
         _ = p.text(width - tw, tw, 0, status(), false);
     }
 
-    var occupied: u32 = 0;
-    var urgent: u32 = 0;
-    var it = server.clients.iterator(.forward);
-    while (it.next()) |cl| {
-        if (cl.mon != m) continue;
-        if (cl.tags != actions.tagmask()) occupied |= cl.tags;
-        if (cl.urgent) urgent |= cl.tags;
-    }
-
+    const t = tagState(m);
     const sel = server.focustop(m);
     var x: i32 = 0;
     for (config.tags, 0..) |tag, i| {
         const bit = @as(u32, 1) << @intCast(i);
         const w = p.textw(tag);
         p.scheme = if (m.tags() & bit != 0) config.bar_sel else config.bar_norm;
-        _ = p.text(x, w, @divTrunc(p.pad(), 2), tag, urgent & bit != 0);
-        if (occupied & bit != 0)
-            p.rect(x + boxs, boxs, boxw, boxw, selected and sel != null and sel.?.tags & bit != 0, urgent & bit != 0);
+        _ = p.text(x, w, @divTrunc(p.pad(), 2), tag, t.urgent & bit != 0);
+        if (t.occupied & bit != 0)
+            p.rect(x + boxs, boxs, boxw, boxw, selected and sel != null and sel.?.tags & bit != 0, t.urgent & bit != 0);
         x += w;
     }
 
@@ -339,8 +383,7 @@ pub fn clickAt(m: *Monitor, lx: f64, tag: *u32) Click {
         }
     }
     if (x < end + p.textw(std.mem.sliceTo(&m.ltsymbol, 0))) return .ltsymbol;
-    const width: i32 = @intFromFloat(@as(f32, @floatFromInt(m.m.width)) * b.scale);
-    if (m == server.selmon and x > width - (p.textWidth(status()) + 2)) return .status;
+    if (m == server.selmon and x > pixelWidth(m) - (p.textWidth(status()) + 2)) return .status;
     return .title;
 }
 

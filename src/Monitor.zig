@@ -343,7 +343,6 @@ pub fn arrange(m: *Monitor) void {
     m.fullscreen_bg.node.setEnabled(m.swipe == null and top != null and top.?.fullscreen);
 
     const lt = m.layout();
-    m.setSymbol(lt.symbol);
 
     // In the floating layout every window shares one layer, so windows that
     // were floating before don't stay pinned above the rest.
@@ -360,7 +359,10 @@ pub fn arrange(m: *Monitor) void {
         m.arrangeShifted(lt, if (s.offset > 0) m.w.height - s.offset else -m.w.height - s.offset);
         m.tagset[m.seltags] = cur;
     }
+    m.setSymbol(lt.symbol);
     m.arrangeShifted(lt, if (m.swipe) |s| -s.offset else 0);
+    // counts and occupied tags may have changed; the bar skips drawing if nothing did
+    Bar.redraw();
     input.motionNotify(0, null, 0, 0, 0, 0);
     lock.checkInhibitors(null);
 }
@@ -378,8 +380,6 @@ fn arrangeShifted(m: *Monitor, lt: *const actions.Layout, shift: i32) void {
 }
 
 pub fn setSymbol(m: *Monitor, s: []const u8) void {
-    if (std.mem.eql(u8, std.mem.sliceTo(&m.ltsymbol, 0), s)) return;
-    Bar.redraw();
     const n = @min(s.len, m.ltsymbol.len);
     @memcpy(m.ltsymbol[0..n], s[0..n]);
     m.ltsymbol[n] = 0;
