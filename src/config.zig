@@ -102,10 +102,10 @@ pub const accel_profile = c.LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
 pub const accel_speed = 0.0;
 pub const button_map = c.LIBINPUT_CONFIG_TAP_MAP_LRM;
 
-const LEFT = @intFromEnum(wlr.OutputLayout.Direction.left);
-const RIGHT = @intFromEnum(wlr.OutputLayout.Direction.right);
-const UP = @intFromEnum(wlr.OutputLayout.Direction.up);
-const DOWN = @intFromEnum(wlr.OutputLayout.Direction.down);
+const LEFT = @backingInt(wlr.OutputLayout.Direction.left);
+const RIGHT = @backingInt(wlr.OutputLayout.Direction.right);
+const UP = @backingInt(wlr.OutputLayout.Direction.up);
+const DOWN = @backingInt(wlr.OutputLayout.Direction.down);
 
 /// mod+n views tag n, +shift moves the window there and follows, +ctrl moves it quietly
 fn tagkeys(comptime sym: xkb.Keysym, comptime i: u5) [3]a.Key {
@@ -129,7 +129,7 @@ fn helper(comptime mod: u32, comptime sym: xkb.Keysym, comptime argv: []const [:
 }
 
 fn chvt(comptime n: u32) a.Key {
-    return .{ .mod = CTRL | ALT, .sym = @enumFromInt(@intFromEnum(K.F1) + n - 1), .func = a.chvt, .arg = .{ .ui = n }, .locked = true };
+    return .{ .mod = CTRL | ALT, .sym = @fromBackingInt(@intCast(@backingInt(K.F1) + n - 1)), .func = a.chvt, .arg = .{ .ui = n }, .locked = true };
 }
 
 pub const keys = [_]a.Key{
@@ -182,10 +182,10 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD | SHIFT, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ "sh", "-c", "grim -g \"$(slurp)\"" }) },
 
     .{ .mod = CTRL | ALT, .sym = K.BackSpace, .func = a.quit },
-} ++ both(MOD, K.h, K.Left, a.focusdir, .{ .ui = @intFromEnum(a.Dir.left) }) ++
-    both(MOD, K.l, K.Right, a.focusdir, .{ .ui = @intFromEnum(a.Dir.right) }) ++
-    both(MOD, K.k, K.Up, a.focusdir, .{ .ui = @intFromEnum(a.Dir.up) }) ++
-    both(MOD, K.j, K.Down, a.focusdir, .{ .ui = @intFromEnum(a.Dir.down) }) ++
+} ++ both(MOD, K.h, K.Left, a.focusdir, .{ .ui = @backingInt(a.Dir.left) }) ++
+    both(MOD, K.l, K.Right, a.focusdir, .{ .ui = @backingInt(a.Dir.right) }) ++
+    both(MOD, K.k, K.Up, a.focusdir, .{ .ui = @backingInt(a.Dir.up) }) ++
+    both(MOD, K.j, K.Down, a.focusdir, .{ .ui = @backingInt(a.Dir.down) }) ++
     both(MOD | SHIFT, K.h, K.Left, a.movecolumn, .{ .i = -1 }) ++
     both(MOD | SHIFT, K.l, K.Right, a.movecolumn, .{ .i = 1 }) ++
     both(MOD | SHIFT, K.k, K.Up, a.movewindow, .{ .i = -1 }) ++
@@ -208,8 +208,8 @@ pub const axes = [_]a.Axis{
     .{ .mod = MOD, .dir = .down, .func = a.viewrel, .arg = .{ .i = 1 } },
     .{ .mod = MOD | SHIFT, .dir = .up, .func = a.tagrel, .arg = .{ .i = -1 } },
     .{ .mod = MOD | SHIFT, .dir = .down, .func = a.tagrel, .arg = .{ .i = 1 } },
-    .{ .mod = MOD, .dir = .left, .func = a.focusdir, .arg = .{ .ui = @intFromEnum(a.Dir.left) } },
-    .{ .mod = MOD, .dir = .right, .func = a.focusdir, .arg = .{ .ui = @intFromEnum(a.Dir.right) } },
+    .{ .mod = MOD, .dir = .left, .func = a.focusdir, .arg = .{ .ui = @backingInt(a.Dir.left) } },
+    .{ .mod = MOD, .dir = .right, .func = a.focusdir, .arg = .{ .ui = @backingInt(a.Dir.right) } },
     .{ .mod = MOD | CTRL, .dir = .left, .func = a.movecolumn, .arg = .{ .i = -1 } },
     .{ .mod = MOD | CTRL, .dir = .right, .func = a.movecolumn, .arg = .{ .i = 1 } },
 };

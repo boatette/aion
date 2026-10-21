@@ -103,7 +103,7 @@ pub fn init(s: *Server) !void {
     s.layers.get(.block).node.raiseToTop();
 
     _ = try wlr.Shm.createWithRenderer(wl_server, 2, renderer);
-    if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
+    if (renderer.getTextureFormats(@backingInt(wlr.BufferCap.dmabuf)) != null) {
         scene.setLinuxDmabufV1(try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer));
         // explicit sync, which nvidia needs for tear-free offloaded clients
         const drm_fd = renderer.getDrmFd();
@@ -272,7 +272,7 @@ pub fn dirtomon(s: *Server, dir: wlr.OutputLayout.Direction) ?*Monitor {
     const cx: f64 = @floatFromInt(m.m.x + @divTrunc(m.m.width, 2));
     const cy: f64 = @floatFromInt(m.m.y + @divTrunc(m.m.height, 2));
     if (s.output_layout.adjacentOutput(dir, m.output, cx, cy)) |next| return @ptrCast(@alignCast(next.data));
-    if (s.output_layout.farthestOutput(@enumFromInt(@intFromEnum(opposite(dir))), m.output, cx, cy)) |next| return @ptrCast(@alignCast(next.data));
+    if (s.output_layout.farthestOutput(@fromBackingInt(@intCast(@backingInt(opposite(dir)))), m.output, cx, cy)) |next| return @ptrCast(@alignCast(next.data));
     return m;
 }
 

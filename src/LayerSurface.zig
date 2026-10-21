@@ -36,12 +36,12 @@ fn sceneLayer(layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
 }
 
 fn index(layer: zwlr.LayerShellV1.Layer) usize {
-    return @intCast(std.math.clamp(@intFromEnum(layer), 0, 3));
+    return @intCast(std.math.clamp(@backingInt(layer), 0, 3));
 }
 
 /// popups of background and bottom surfaces still need to show above windows
 fn popupLayer(layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
-    return if (@intFromEnum(layer) < @intFromEnum(zwlr.LayerShellV1.Layer.top)) server.layers.get(.top) else sceneLayer(layer);
+    return if (@backingInt(layer) < @backingInt(zwlr.LayerShellV1.Layer.top)) server.layers.get(.top) else sceneLayer(layer);
 }
 
 pub fn create(_: *wl.Listener(*wlr.LayerSurfaceV1), layer_surface: *wlr.LayerSurfaceV1) void {
@@ -112,7 +112,7 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     l.mon.arrangeLayers();
 
     // like sway, on_demand surfaces above windows get the keyboard once when they appear
-    const above = @intFromEnum(ls.current.layer) >= @intFromEnum(zwlr.LayerShellV1.Layer.top);
+    const above = @backingInt(ls.current.layer) >= @backingInt(zwlr.LayerShellV1.Layer.top);
     if (mapping and above and ls.current.keyboard_interactive == .on_demand and !input.locked and server.exclusive_focus == null) {
         server.focus(null, false);
         input.keyboardEnter(ls.surface);

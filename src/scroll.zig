@@ -307,7 +307,7 @@ pub fn moveWindow(cl: *Client, dir: i32) void {
     const col = columnOf(cl) orelse return;
     var buf: [max_column]*Client = undefined;
     const ms = members(col, &buf);
-    const i = std.mem.indexOfScalar(*Client, ms, cl) orelse return;
+    const i = std.mem.findScalar(*Client, ms, cl) orelse return;
     const j = @as(i64, @intCast(i)) + dir;
     if (j < 0 or j >= ms.len) return;
     const other = ms[@intCast(j)];

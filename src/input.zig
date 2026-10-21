@@ -41,7 +41,7 @@ var xcursor: *wlr.XcursorManager = undefined;
 var group: *wlr.KeyboardGroup = undefined;
 var group_keyboard: Keyboard = undefined;
 /// keys whose press ran a binding, so their release is not sent to clients
-var consumed: std.StaticBitSet(1024) = .initEmpty();
+var consumed: std.StaticBitSet(1024) = .empty;
 
 // virtual keyboards can send any keycode, so stay inside the set
 fn consume(keycode: u32) void {

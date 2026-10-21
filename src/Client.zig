@@ -387,8 +387,8 @@ const Matched = struct {
 pub fn matchRules(cl: *const Client) Matched {
     var res: Matched = .{};
     for (config.rules) |r| {
-        if (r.title) |t| if (std.mem.indexOf(u8, cl.title(), t) == null) continue;
-        if (r.app_id) |id| if (std.mem.indexOf(u8, cl.appId(), id) == null) continue;
+        if (r.title) |t| if (std.mem.find(u8, cl.title(), t) == null) continue;
+        if (r.app_id) |id| if (std.mem.find(u8, cl.appId(), id) == null) continue;
         if (r.floating) |f| res.floating = f;
         if (r.width) |w| res.width = w;
         res.fullscreen = res.fullscreen or r.fullscreen;

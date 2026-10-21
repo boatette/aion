@@ -2,7 +2,7 @@
   lib,
   stdenv,
   writeText,
-  zig,
+  zig_0_17,
   pkg-config,
   wayland-scanner,
   fcft,
@@ -52,7 +52,7 @@ stdenv.mkDerivation (finalAttrs: {
   nativeBuildInputs = [
     pkg-config
     wayland-scanner
-    zig.hook
+    zig_0_17.hook
   ];
 
   buildInputs = [
@@ -67,9 +67,9 @@ stdenv.mkDerivation (finalAttrs: {
     wlroots_0_20
   ];
 
-  zigDeps = zig.fetchDeps {
+  zigDeps = zig_0_17.fetchDeps {
     inherit (finalAttrs) pname version src;
-    hash = "sha256-1TW4SRIcrBvJSU9m+tCa9mwQK3PRzrNxGOlRwoiVrp4=";
+    hash = "sha256-YDqQnqI+bIjT3hnF6/ss19jt9r2fBwZQixVyBqkClgY=";
   };
 
   postPatch = lib.optionalString (config != null) ''

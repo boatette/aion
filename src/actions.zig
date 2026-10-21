@@ -259,7 +259,7 @@ pub fn focusmon(arg: *const Arg) void {
     const n = server.monitors.length();
     var i: usize = 0;
     while (i < n) : (i += 1) {
-        server.selmon = server.dirtomon(@enumFromInt(arg.i));
+        server.selmon = server.dirtomon(@fromBackingInt(@intCast(arg.i)));
         if (server.selmon != null and server.selmon.?.output.enabled) break;
     }
     server.focus(server.focustop(server.selmon), true);
@@ -267,7 +267,7 @@ pub fn focusmon(arg: *const Arg) void {
 
 pub fn tagmon(arg: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
-    const m = server.dirtomon(@enumFromInt(arg.i)) orelse return;
+    const m = server.dirtomon(@fromBackingInt(@intCast(arg.i))) orelse return;
     if (m == sel.mon) return;
     scroll.remove(sel);
     sel.link.remove();
@@ -332,7 +332,7 @@ pub fn forcekill(_: *const Arg) void {
 pub fn focusnearest(arg: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     if (sel.fullscreen) return;
-    const dir: Dir = @enumFromInt(arg.ui);
+    const dir: Dir = @fromBackingInt(@intCast(arg.ui));
     var best: ?*Client = null;
     var best_dist: i64 = std.math.maxInt(i64);
     var it = server.clients.iterator(.forward);
@@ -380,7 +380,7 @@ pub fn movestack(arg: *const Arg) void {
 pub fn focusdir(arg: *const Arg) void {
     const m = server.selmon orelse return;
     const sel = server.focustop(m) orelse return;
-    const dir: Dir = @enumFromInt(arg.ui);
+    const dir: Dir = @fromBackingInt(@intCast(arg.ui));
     const step: i32 = if (dir == .left or dir == .up) -1 else 1;
     if (m.layout().arrange == scroll.monocle) return focusstack(&.{ .i = step });
     if (selTiled() == null) return focusnearest(arg);
@@ -390,7 +390,7 @@ pub fn focusdir(arg: *const Arg) void {
             const col = scroll.columnOf(sel) orelse return;
             var buf: [scroll.max_column]*Client = undefined;
             const ms = scroll.members(col, &buf);
-            const i: i64 = @intCast(std.mem.indexOfScalar(*Client, ms, sel) orelse return);
+            const i: i64 = @intCast(std.mem.findScalar(*Client, ms, sel) orelse return);
             if (i + step >= 0 and i + step < ms.len) focus(ms[@intCast(i + step)]);
         },
     }

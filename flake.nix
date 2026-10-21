@@ -32,7 +32,7 @@
       checks = forAllSystems (pkgs: {
         inherit (self.packages.${pkgs.stdenv.hostPlatform.system}) aion;
 
-        zig-fmt = pkgs.runCommand "aion-zig-fmt" { nativeBuildInputs = [ pkgs.zig ]; } ''
+        zig-fmt = pkgs.runCommand "aion-zig-fmt" { nativeBuildInputs = [ pkgs.zig_0_17 ]; } ''
           zig fmt --check ${./build.zig} ${./build.zig.zon} ${./src}
           touch $out
         '';

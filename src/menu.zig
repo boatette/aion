@@ -59,8 +59,8 @@ pub fn key(mods: u32, sym: K) void {
 }
 
 fn isModifier(sym: K) bool {
-    const v = @intFromEnum(sym);
-    return v >= @intFromEnum(K.Shift_L) and v <= @intFromEnum(K.Hyper_R);
+    const v = @backingInt(sym);
+    return v >= @backingInt(K.Shift_L) and v <= @backingInt(K.Hyper_R);
 }
 
 fn sessionKey(sym: K) void {
@@ -148,7 +148,7 @@ fn filter() void {
     const q = query();
     for ([_]bool{ true, false }) |prefix| {
         for (apps.items, 0..) |app, i| {
-            const at = std.ascii.indexOfIgnoreCase(app.name, q) orelse continue;
+            const at = std.ascii.findIgnoreCase(app.name, q) orelse continue;
             if ((at == 0) == prefix) matches.append(gpa, i) catch return;
         }
     }
@@ -208,7 +208,7 @@ fn parseApps() void {
     for (text, 0..) |ch, i| {
         if (ch != '\n') continue;
         const line = text[start..i];
-        if (std.mem.indexOfScalar(u8, line, '\t')) |tab| {
+        if (std.mem.findScalar(u8, line, '\t')) |tab| {
             text[i] = 0;
             apps.append(gpa, .{ .name = line[0..tab], .path = text[start + tab + 1 .. i :0] }) catch return;
         }

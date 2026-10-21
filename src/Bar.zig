@@ -54,7 +54,7 @@ fn loadFont(b: *Bar, scale: f32) void {
     if (b.font != null and b.scale == scale) return;
     if (b.font) |f| c.fcft_destroy(f);
     var attrs: [32:0]u8 = undefined;
-    _ = std.fmt.bufPrintZ(&attrs, "dpi={d:.2}", .{96 * scale}) catch unreachable;
+    _ = std.fmt.bufPrintSentinel(&attrs, "dpi={d:.2}", .{96 * scale}, 0) catch unreachable;
     var names: [config.fonts.len][*c]const u8 = undefined;
     for (config.fonts, 0..) |f, i| names[i] = f;
     b.font = c.fcft_from_name(names.len, &names, &attrs);

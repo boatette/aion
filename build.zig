@@ -4,7 +4,6 @@ const Build = std.Build;
 const manifest = @import("build.zig.zon");
 
 const Scanner = @import("wayland").Scanner;
-const Translator = @import("translate_c").Translator;
 
 const system_protocols = [_][]const u8{
     "stable/viewporter/viewporter.xml",
@@ -103,9 +102,8 @@ pub fn build(b: *Build) void {
     wlroots.resolved_target = target;
     wlroots.linkSystemLibrary("wlroots-0.20", .{});
 
-    const c: Translator = .init(b.dependency("translate_c", .{}), .{
-        .name = "c",
-        .c_source_file = b.path("src/c.h"),
+    const c = b.addTranslateC(.{
+        .root_source_file = b.path("src/c.h"),
         .target = target,
         .optimize = optimize,
     });
@@ -131,7 +129,7 @@ pub fn build(b: *Build) void {
     mod.addImport("xkbcommon", xkbcommon);
     mod.addImport("pixman", pixman);
     mod.addImport("wlroots", wlroots);
-    mod.addImport("c", c.mod);
+    mod.addImport("c", c.createModule());
     for ([_][]const u8{ "wayland-server", "wlroots-0.20", "xkbcommon", "pixman-1", "libinput", "fcft" }) |lib|
         mod.linkSystemLibrary(lib, .{});
 
@@ -140,12 +138,12 @@ pub fn build(b: *Build) void {
 
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
     b.step("run", "Run the compositor").dependOn(&run.step);
 
     b.step("check", "Check the compositor compiles").dependOn(&exe.step);
 
-    const fmt_paths = &.{ "build.zig", "build.zig.zon", "src" };
+    const fmt_paths: []const Build.LazyPath = &.{ b.path("build.zig"), b.path("build.zig.zon"), b.path("src") };
     b.step("fmt", "Format Zig sources").dependOn(&b.addFmt(.{ .paths = fmt_paths }).step);
     b.step("fmt-check", "Fail if Zig sources are unformatted").dependOn(&b.addFmt(.{ .paths = fmt_paths, .check = true }).step);
 }
