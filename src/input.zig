@@ -541,14 +541,16 @@ fn handleAxis(event: *wlr.Pointer.event.Axis) bool {
     const horizontal = event.orientation == .horizontal_scroll;
     const smooth = event.source == .finger or event.source == .continuous;
 
+    // fingers lifted, maybe after the modifier, so a strip scroll still snaps
+    if (smooth and horizontal and event.delta == 0) if (axis_scrolling) |m| {
+        axis_scrolling = null;
+        scroll.snap(m);
+        return true;
+    };
     if (smooth and horizontal and clean(mods) == clean(config.scroll_mod)) {
         const m = monAt(server.cursor.x, server.cursor.y) orelse return false;
         if (!scroll.isScrolling(m)) return false;
-        if (event.delta == 0) {
-            // Fingers lifted.
-            scroll.snap(m);
-            axis_scrolling = null;
-        } else {
+        if (event.delta != 0) {
             scroll.scrollBy(m, event.delta * config.swipe_speed);
             axis_scrolling = m;
         }
@@ -560,16 +562,17 @@ fn handleAxis(event: *wlr.Pointer.event.Axis) bool {
     else
         (if (event.delta > 0) .down else .up);
     const a = axisBinding(mods, dir) orelse return false;
-    if (!smooth) {
-        if (event.delta != 0) a.func(&a.arg);
-        return true;
-    }
+    // wheels count 120 per notch and hi-res ones send fractions of that
+    const amount: f64 = if (smooth)
+        event.delta
+    else if (event.delta_discrete != 0)
+        @as(f64, @floatFromInt(event.delta_discrete)) * config.axis_step / 120
+    else
+        @as(f64, @floatFromInt(std.math.sign(event.delta))) * config.axis_step;
     const i: usize = @intFromBool(horizontal);
-    if (event.delta == 0) {
-        axis_acc[i] = 0;
-        return true;
-    }
-    axis_acc[i] += event.delta;
+    // a stop or a change of direction starts the count again
+    if (amount == 0 or axis_acc[i] * amount < 0) axis_acc[i] = 0;
+    axis_acc[i] += amount;
     if (@abs(axis_acc[i]) >= config.axis_step) {
         axis_acc[i] = 0;
         a.func(&a.arg);
