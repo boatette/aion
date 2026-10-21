@@ -65,9 +65,10 @@ The bar reads one status line at a time from `status_cmd`'s output, or from stdi
 | Mod+Home/End, +Shift           | focus or move to the first/last column                                    |
 | Mod+a                          | monocle                                                                   |
 | Mod+o, Mod+Shift+o, Mod+Ctrl+o | previous layout, floating, scrolling                                      |
-| Mod+Shift+f                    | fullscreen                                                                |
+| Mod+Shift+f, Mod+Ctrl+f        | fullscreen                                                                |
 | Mod+1..0, +Shift, +Ctrl        | view tag; move the window there and follow; move it there and stay        |
 | Mod+g                          | view every tag                                                            |
+| Mod+Tab                        | go back to the previous tags                                              |
 | Mod+p                          | pin the window to every tag                                               |
 | Mod+v                          | toggle floating                                                           |
 | Mod+Return                     | terminal                                                                  |
@@ -75,6 +76,9 @@ The bar reads one status line at a time from `status_cmd`'s output, or from stdi
 | Mod+x                          | session keys in the bar                                                   |
 | Mod+b                          | toggle the bar                                                            |
 | Mod+q, Mod+Alt+q               | close, kill                                                               |
+| Alt+Tab, Alt+Shift+Tab         | cycle through the visible windows                                         |
+| Ctrl+Alt+F1..F12               | switch VT                                                                 |
+| Ctrl+Alt+Backspace             | quit                                                                      |
 
 The arrow keys work wherever h/j/k/l do.
 
@@ -87,7 +91,7 @@ Mouse:
 
 ## Gestures
 
-- **3 fingers left/right:** the strip follows your fingers. On release, the column nearest the middle takes focus and snaps fully into view.
+- **3 fingers left/right:** the strip follows your fingers. On release, the column that ends up where the focused one was takes focus, and the strip lines up with the column edges.
 - **3 fingers up/down:** next/previous tag.
 - **4 fingers left/right:** move the column.
 - **4 fingers up/down:** move the window to the next/previous tag.

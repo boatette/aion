@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=aion
-Comment=A scrolling Wayland compositor
+Comment=A dwl-like scrolling Wayland compositor
 Exec=aion
 Type=Application
 DesktopNames=aion
