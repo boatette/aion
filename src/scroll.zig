@@ -15,8 +15,17 @@ pub const Column = struct {
     x: i32,
     w: i32,
     index: u32,
+    /// the tag the column is grouped under
+    group: u32,
+
+    /// a window drawn in this column; others can sit between its links in a multi-tag view
+    pub fn has(col: Column, cl: *const Client) bool {
+        const m = col.first.mon.?;
+        return tiledOn(cl, m) and group(cl, m) == col.group;
+    }
 
     pub fn contains(col: Column, cl: *const Client) bool {
+        if (cl.mon == null or group(cl, cl.mon.?) != col.group) return false;
         var link = &col.first.link;
         while (true) : (link = link.next.?) {
             const cur: *Client = @fieldParentPtr("link", link);
@@ -30,40 +39,55 @@ pub fn tiledOn(cl: *const Client, m: *const Monitor) bool {
     return cl.tiled() and cl.visibleOn(m);
 }
 
+/// the lowest of a window's shown tags, which multi-tag views group it under
+pub fn group(cl: *const Client, m: *const Monitor) u32 {
+    const t = cl.tags & m.tags();
+    return t & -%t;
+}
+
 pub fn columnWidth(cl: *const Client, m: *const Monitor) i32 {
     const w: i32 = @intFromFloat(@round(cl.width * @as(f32, @floatFromInt(m.w.width))));
     return std.math.clamp(w, 1, @max(m.w.width, 1));
 }
 
-/// walks the columns of a monitor's current view, left to right
+/// walks the columns of a monitor's current view, left to right, a tag at a time
 pub const Columns = struct {
     m: *Monitor,
     link: *wl.list.Link,
+    group: u32,
     x: i32 = 0,
     index: u32 = 0,
 
     pub fn init(m: *Monitor) Columns {
-        return .{ .m = m, .link = &server.clients.link };
+        const t = m.tags();
+        return .{ .m = m, .link = &server.clients.link, .group = t & -%t };
     }
 
     fn nextTiled(it: *const Columns, from: *wl.list.Link) ?*Client {
         var link = from.next.?;
         while (link != &server.clients.link) : (link = link.next.?) {
             const cl: *Client = @fieldParentPtr("link", link);
-            if (tiledOn(cl, it.m)) return cl;
+            if (tiledOn(cl, it.m) and group(cl, it.m) == it.group) return cl;
         }
         return null;
     }
 
     pub fn next(it: *Columns) ?Column {
-        const first = it.nextTiled(it.link) orelse return null;
+        const first = while (true) {
+            if (it.nextTiled(it.link)) |cl| break cl;
+            // then on to the next shown tag's windows
+            const rest = it.m.tags() & ~(it.group | (it.group -% 1));
+            if (rest == 0) return null;
+            it.group = rest & -%rest;
+            it.link = &server.clients.link;
+        };
         var last = first;
         while (it.nextTiled(&last.link)) |cl| {
             if (!cl.stacked) break;
             last = cl;
         }
         it.link = &last.link;
-        const col: Column = .{ .first = first, .last = last, .x = it.x, .w = columnWidth(first, it.m), .index = it.index };
+        const col: Column = .{ .first = first, .last = last, .x = it.x, .w = columnWidth(first, it.m), .index = it.index, .group = it.group };
         it.x += col.w;
         it.index += 1;
         return col;
@@ -109,7 +133,7 @@ pub fn arrange(m: *Monitor) void {
         var link = &col.first.link;
         while (true) : (link = link.next.?) {
             const cl: *Client = @fieldParentPtr("link", link);
-            if (tiledOn(cl, m)) weights += cl.weight;
+            if (col.has(cl)) weights += cl.weight;
             if (cl == col.last) break;
         }
 
@@ -117,7 +141,7 @@ pub fn arrange(m: *Monitor) void {
         link = &col.first.link;
         while (true) : (link = link.next.?) {
             const cl: *Client = @fieldParentPtr("link", link);
-            if (tiledOn(cl, m)) {
+            if (col.has(cl)) {
                 const h = if (cl == col.last)
                     m.w.y + m.shift + m.w.height - y
                 else
@@ -219,12 +243,11 @@ pub const max_column = 32;
 
 /// the column's windows in order, top to bottom
 pub fn members(col: Column, buf: *[max_column]*Client) []*Client {
-    const m = col.first.mon.?;
     var n: usize = 0;
     var link = &col.first.link;
     while (true) : (link = link.next.?) {
         const cl: *Client = @fieldParentPtr("link", link);
-        if (tiledOn(cl, m) and n < buf.len) {
+        if (col.has(cl) and n < buf.len) {
             buf[n] = cl;
             n += 1;
         }
@@ -273,6 +296,8 @@ fn moveAfter(clients: []const *Client, anchor: *wl.list.Link) void {
 pub fn moveColumn(cl: *Client, dir: i32, far: bool) void {
     const own = columnOf(cl) orelse return;
     const other = neighbour(cl, dir, far) orelse return;
+    // a column only moves within its own tag
+    if (other.group != own.group) return;
     var buf: [max_column]*Client = undefined;
     const mine = members(own, &buf);
     moveAfter(mine, if (dir > 0) &other.last.link else other.first.link.prev.?);
@@ -311,6 +336,7 @@ pub fn consumeOrExpel(cl: *Client, dir: i32) void {
         moveAfter(&.{cl}, anchor);
     } else {
         const other = neighbour(cl, dir, false) orelse return;
+        if (other.group != col.group) return;
         if (members(other, &buf).len >= max_column) return;
         cl.stacked = true;
         moveAfter(&.{cl}, &other.last.link);
