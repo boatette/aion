@@ -10,8 +10,7 @@ self:
 let
   cfg = config.programs.aion;
 
-  # Environment first, then aion, which hands the session over to systemd
-  # and D-Bus once WAYLAND_DISPLAY exists.
+  # set the environment, then aion hands it to systemd and dbus once WAYLAND_DISPLAY exists
   session = pkgs.writeShellScriptBin "aion-session" ''
     export XDG_CURRENT_DESKTOP=aion
     export XDG_SESSION_DESKTOP=aion

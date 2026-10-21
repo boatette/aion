@@ -17,7 +17,7 @@ const build_options = @import("build_options");
 
 pub const Layer = enum { bg, bottom, tile, float, top, fs, overlay, block };
 
-/// What a scene node belongs to, stored in node.data.
+/// what a scene node belongs to, stored in node.data
 pub const Owner = union(enum) {
     client: *Client,
     layer: *LayerSurface,
@@ -48,7 +48,7 @@ monitors: wl.list.Head(Monitor, .link),
 clients: wl.list.Head(Client, .link),
 fstack: wl.list.Head(Client, .flink),
 selmon: ?*Monitor = null,
-/// A top or overlay layer surface that holds the keyboard, like a launcher.
+/// a top or overlay layer surface holding the keyboard, like a launcher
 exclusive_focus: ?*LayerSurface = null,
 socket: [11]u8 = undefined,
 
@@ -105,7 +105,7 @@ pub fn init(s: *Server) !void {
     _ = try wlr.Shm.createWithRenderer(wl_server, 2, renderer);
     if (renderer.getTextureFormats(@intFromEnum(wlr.BufferCap.dmabuf)) != null) {
         scene.setLinuxDmabufV1(try wlr.LinuxDmabufV1.createWithRenderer(wl_server, 5, renderer));
-        // Explicit sync, which NVIDIA needs for tear-free offloaded clients.
+        // explicit sync, which nvidia needs for tear-free offloaded clients
         const drm_fd = renderer.getDrmFd();
         if (drm_fd >= 0 and renderer.features.timeline and backend.features.timeline)
             _ = wlr.LinuxDrmSyncobjManagerV1.create(wl_server, 1, drm_fd);
@@ -133,7 +133,7 @@ pub fn init(s: *Server) !void {
     s.layer_shell.events.new_surface.add(&s.new_layer_surface);
     renderer.events.lost.add(&s.renderer_lost);
 
-    // Lazy: Xwayland only starts once an X11 client connects.
+    // lazy, so xwayland only starts once an x11 client connects
     if (build_options.xwayland) {
         if (wlr.Xwayland.create(wl_server, s.compositor, true)) |x| {
             s.xwayland = x;
@@ -155,19 +155,18 @@ pub fn start(s: *Server, startup: ?[*:0]const u8) !void {
     _ = c.setenv("WAYLAND_DISPLAY", socket.ptr, 1);
     Bar.startStatus();
 
-    // Startup commands run with the session environment the compositor sees.
+    // startup commands get the session environment the compositor sees
     if (startup) |cmd| {
         const argv = [_:null]?[*:0]const u8{ "/bin/sh", "-c", cmd };
         actions.spawnArgv(&argv);
     }
 
-    // The backend picked the cursor position while outputs were added; put it somewhere sane.
+    // the backend placed the cursor while adding outputs, so put it somewhere sane
     if (s.selmon) |m| s.cursor.warpClosest(null, @floatFromInt(m.m.x + @divTrunc(m.m.width, 2)), @floatFromInt(m.m.y + @divTrunc(m.m.height, 2)));
     input.updateCursor();
 }
 
-/// wlroots asserts that nothing still listens to an object it destroys, so
-/// every global listener is detached first.
+/// wlroots asserts nothing still listens to what it destroys, so every global listener goes first
 pub fn deinit(s: *Server) void {
     Bar.stopStatus();
     input.deinit();
@@ -207,7 +206,7 @@ pub fn focus(s: *Server, cl: ?*Client, lift: bool) void {
     }
 
     Bar.redraw();
-    // The client gets the keyboard once the layer surface holding it closes.
+    // the client gets the keyboard once the layer surface holding it closes
     if (s.exclusive_focus != null) return;
 
     if (old) |o| {
@@ -237,7 +236,7 @@ pub const Hit = struct {
     sy: f64 = 0,
 };
 
-/// Find what is under a layout coordinate, walking layers top to bottom.
+/// find what is under a layout coordinate, walking layers top to bottom
 pub fn hitTest(s: *Server, x: f64, y: f64) Hit {
     var hit: Hit = .{};
     const order = [_]Layer{ .block, .overlay, .fs, .top, .float, .tile, .bottom, .bg };
@@ -252,7 +251,7 @@ pub fn hitTest(s: *Server, x: f64, y: f64) Hit {
                 hit.sy = sy;
             }
         }
-        // Walk up to the tree that owns this node.
+        // walk up to the tree that owns this node
         var n: ?*wlr.SceneNode = node;
         while (n) |cur| : (n = if (cur.parent) |p| &p.node else null) {
             const owner: *Owner = @ptrCast(@alignCast(cur.data orelse continue));
@@ -319,12 +318,12 @@ const Popup = struct {
         if (!p.popup.base.initial_commit) return;
         const server = &@import("main.zig").server;
         const parent = p.popup.parent orelse return;
-        // Toplevels and popups store their scene tree in surface.data.
+        // toplevels and popups keep their scene tree in surface.data
         const parent_tree: *wlr.SceneTree = @ptrCast(@alignCast(parent.data orelse return));
         const tree = parent_tree.createSceneXdgSurface(p.popup.base) catch return;
         p.popup.base.surface.data = tree;
 
-        // Keep popups on the monitor their toplevel is on.
+        // keep popups on the monitor their toplevel is on
         var root = parent;
         var box: wlr.Box = undefined;
         while (wlr.XdgSurface.tryFromWlrSurface(root)) |xs| {

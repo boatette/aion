@@ -16,10 +16,10 @@
   glibc,
   linuxHeaders,
   versionCheckHook,
-  # A config.zig (path or text) replacing src/config.zig, like dwl's configH.
+  # a config.zig (path or text) replacing src/config.zig, like dwl's configH
   configFile ? null,
   enableXWayland ? true,
-  # Zig release mode: fast, safe or small.
+  # zig release mode: fast, safe or small
   release ? "fast",
 }:
 
@@ -81,7 +81,7 @@ stdenv.mkDerivation (finalAttrs: {
     ln -s ${finalAttrs.zigDeps} "$ZIG_GLOBAL_CACHE_DIR/p"
   '';
 
-  # translate-c needs the libc and kernel headers, which have no fixed path on Nix.
+  # translate-c needs the libc and kernel headers, which have no fixed path on nix
   env = {
     AION_LIBC_INCLUDE = "${lib.getDev glibc}/include";
     AION_LINUX_HEADERS = "${linuxHeaders}/include";

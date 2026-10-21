@@ -11,7 +11,7 @@ const Monitor = @import("Monitor.zig");
 pub const Column = struct {
     first: *Client,
     last: *Client,
-    /// Position in the strip and width, in pixels.
+    /// position in the strip and width, in pixels
     x: i32,
     w: i32,
     index: u32,
@@ -39,7 +39,7 @@ pub fn columnWidth(cl: *const Client, m: *const Monitor) i32 {
     return std.math.clamp(w, 1, @max(m.w.width, 1));
 }
 
-/// Walks the columns of a monitor's current view, left to right.
+/// walks the columns of a monitor's current view, left to right
 pub const Columns = struct {
     m: *Monitor,
     link: *wl.list.Link,
@@ -97,7 +97,7 @@ pub fn arrange(m: *Monitor) void {
     }
 
     const s = &m.scroll[slot(m)];
-    // A strip narrower than the monitor may sit anywhere on it, so it can be centered.
+    // a strip narrower than the monitor may sit anywhere on it, so it can be centred
     const slack = total - m.w.width;
     s.* = std.math.clamp(s.*, @min(0, slack), @max(0, slack));
 
@@ -160,7 +160,7 @@ pub fn monocle(m: *Monitor) void {
     if (server.focustop(m)) |cl| cl.scene.node.raiseToTop();
 }
 
-/// Scroll just enough for the client's column to be fully visible.
+/// scroll just enough for the client's column to be fully visible
 pub fn reveal(cl: *Client) void {
     const m = cl.mon orelse return;
     if (!isScrolling(m)) return;
@@ -182,7 +182,7 @@ pub fn center(cl: *Client) void {
     m.arrange();
 }
 
-/// Where the focused column sits on screen, so a view change can keep it there.
+/// where the focused column sits on screen, so a view change can keep it there
 pub const Placement = struct { cl: *Client, left: i32 };
 
 pub fn placement(m: *Monitor) ?Placement {
@@ -192,7 +192,7 @@ pub fn placement(m: *Monitor) ?Placement {
     return .{ .cl = cl, .left = col.x - m.scroll[slot(m)] };
 }
 
-/// A window shown in both views stays put instead of taking the new view's scroll.
+/// a window shown in both views stays put instead of taking the new view's scroll
 pub fn keep(m: *Monitor, a: ?Placement) void {
     const an = a orelse return;
     if (!isScrolling(m) or server.focustop(m) != an.cl) return;
@@ -200,7 +200,7 @@ pub fn keep(m: *Monitor, a: ?Placement) void {
     m.scroll[slot(m)] = col.x - an.left;
 }
 
-/// New windows open as a column right after the focused one.
+/// new windows open as a column right after the focused one
 pub fn insert(cl: *Client) void {
     if (server.focustop(server.selmon)) |sel| {
         if (columnOf(sel)) |col| {
@@ -211,7 +211,7 @@ pub fn insert(cl: *Client) void {
     server.clients.append(cl);
 }
 
-/// Hand a leaving column head's place to the next window in its column.
+/// hand a leaving column head's place to the next window in its column
 pub fn remove(cl: *Client) void {
     if (cl.stacked) return;
     const m = cl.mon orelse return;
@@ -227,7 +227,7 @@ pub fn remove(cl: *Client) void {
     }
 }
 
-/// Size for a window's first configure, before it is mapped.
+/// size for a window's first configure, before it is mapped
 pub fn initialSize(cl: *const Client) [2]i32 {
     const m = server.selmon orelse return .{ 0, 0 };
     const rules = cl.matchRules();
@@ -240,7 +240,7 @@ pub fn initialSize(cl: *const Client) [2]i32 {
 
 pub const max_column = 32;
 
-/// The column's windows in order, top to bottom.
+/// the column's windows in order, top to bottom
 pub fn members(col: Column, buf: *[max_column]*Client) []*Client {
     const m = col.first.mon.?;
     var n: usize = 0;
@@ -256,7 +256,7 @@ pub fn members(col: Column, buf: *[max_column]*Client) []*Client {
     return buf[0..n];
 }
 
-/// The column dir columns away from cl's, clamped to the ends when far is set.
+/// the column dir columns away from cl's, or the far end when far is set
 pub fn neighbour(cl: *const Client, dir: i32, far: bool) ?Column {
     const m = cl.mon orelse return null;
     const own = columnOf(cl) orelse return null;
@@ -276,7 +276,7 @@ pub fn neighbour(cl: *const Client, dir: i32, far: bool) ?Column {
     return if (dir > 0) found else null;
 }
 
-/// The window of a column focused most recently.
+/// the column's most recently focused window
 pub fn lastFocused(col: Column) *Client {
     var it = server.fstack.iterator(.forward);
     while (it.next()) |cl| if (col.contains(cl)) return cl;
@@ -292,7 +292,7 @@ fn moveAfter(clients: []const *Client, anchor: *wl.list.Link) void {
     }
 }
 
-/// Swap a column with the one dir columns away (or the far end).
+/// swap a column with the one dir columns away, or the far end
 pub fn moveColumn(cl: *Client, dir: i32, far: bool) void {
     const own = columnOf(cl) orelse return;
     const other = neighbour(cl, dir, far) orelse return;
@@ -302,7 +302,7 @@ pub fn moveColumn(cl: *Client, dir: i32, far: bool) void {
     reveal(cl);
 }
 
-/// Swap a window with its neighbour inside its column.
+/// swap a window with its neighbour inside its column
 pub fn moveWindow(cl: *Client, dir: i32) void {
     const col = columnOf(cl) orelse return;
     var buf: [max_column]*Client = undefined;
@@ -317,8 +317,7 @@ pub fn moveWindow(cl: *Client, dir: i32) void {
     cl.mon.?.arrange();
 }
 
-/// Expel a window from a shared column, or move a lone window into the
-/// neighbouring column.
+/// expel a window from a shared column, or move a lone window into the neighbouring one
 pub fn consumeOrExpel(cl: *Client, dir: i32) void {
     const col = columnOf(cl) orelse return;
     var buf: [max_column]*Client = undefined;
@@ -381,7 +380,7 @@ pub fn toggleFullWidth(cl: *Client) void {
     }
 }
 
-/// Grow or shrink a window's share of its column's height by delta.
+/// grow or shrink a window's share of its column's height by delta
 pub fn changeHeight(cl: *Client, delta: f32) void {
     const col = columnOf(cl) orelse return;
     var buf: [max_column]*Client = undefined;
@@ -397,18 +396,17 @@ pub fn changeHeight(cl: *Client, delta: f32) void {
 
 var remainder: f64 = 0;
 
-/// A free scroll in progress. Travel counts what the clamped strip
-/// couldn't follow too, so a strip that fits on screen still moves focus.
+/// a free scroll; travel counts past the strip's ends so a strip that fits still moves focus
 const Drag = struct { m: *Monitor, start: i32, focus: i32, travel: f64 = 0 };
 var drag: ?Drag = null;
 
-/// The strip position the focused column's middle is at, or the screen's middle.
+/// strip position of the focused column's middle, or of the screen's middle
 fn focusPoint(m: *Monitor) i32 {
     if (server.focustop(m)) |cl| if (columnOf(cl)) |col| return col.x + @divTrunc(col.w, 2);
     return m.scroll[slot(m)] + @divTrunc(m.w.width, 2);
 }
 
-/// Move the strip by delta pixels; positive shows more of the right side.
+/// move the strip by delta pixels; positive shows more of the right side
 pub fn scrollBy(m: *Monitor, delta: f64) void {
     if (!isScrolling(m)) return;
     if (drag == null or drag.?.m != m) drag = .{ .m = m, .start = m.scroll[slot(m)], .focus = focusPoint(m) };
@@ -421,8 +419,7 @@ pub fn scrollBy(m: *Monitor, delta: f64) void {
     m.arrange();
 }
 
-/// The scroll nearest s that lines a column edge up with a screen edge
-/// and shows col fully.
+/// the scroll nearest s that shows col fully with a column edge on a screen edge
 fn aligned(m: *Monitor, col: Column, s: i32, total: i32) i32 {
     const hi = total - m.w.width;
     var best = std.math.clamp(col.x, 0, hi);
@@ -437,8 +434,7 @@ fn aligned(m: *Monitor, col: Column, s: i32, total: i32) i32 {
     return best;
 }
 
-/// After a free scroll: focus the column the focused one was dragged onto,
-/// and line the strip up with its columns.
+/// after a free scroll, focus the column now where the focused one was and line the strip up
 pub fn snap(m: *Monitor) void {
     remainder = 0;
     const d = drag orelse return;
@@ -458,15 +454,14 @@ pub fn snap(m: *Monitor) void {
     const col = best orelse return;
     server.focus(lastFocused(col), true);
     const s = &m.scroll[slot(m)];
-    // A strip that fits shows every column anyway; keep it where it was.
+    // a strip that fits shows every column anyway, so keep it where it was
     s.* = if (it.x <= m.w.width) d.start else aligned(m, col, s.*, it.x);
     m.arrange();
 }
 
 var tag_travel: f64 = 0;
 
-/// Push the view up by delta pixels (down when negative), pulling the next
-/// (or previous) tag in behind it.
+/// push the view up by delta pixels (down when negative), pulling the next or previous tag in
 pub fn swipeTags(m: *Monitor, delta: f64) void {
     const t = m.tags();
     if (@popCount(t) != 1) return;
@@ -475,7 +470,7 @@ pub fn swipeTags(m: *Monitor, delta: f64) void {
     const offset: i32 = @intFromFloat(@round(tag_travel));
     const next = if (offset > 0) t << 1 else t >> 1;
     if (offset == 0 or next & actions.tagmask() == 0) {
-        // Nothing past the first or last tag.
+        // nothing past the first or last tag
         tag_travel = 0;
         m.swipe = null;
     } else {
@@ -484,7 +479,7 @@ pub fn swipeTags(m: *Monitor, delta: f64) void {
     m.arrange();
 }
 
-/// After a tag swipe: view the incoming tag if it came far enough, or slide back.
+/// after a tag swipe, view the incoming tag if it came far enough or slide back
 pub fn snapTags(m: *Monitor) void {
     const far = @abs(tag_travel) >= config.swipe_threshold;
     tag_travel = 0;

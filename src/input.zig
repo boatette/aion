@@ -25,7 +25,7 @@ var grabcx: i32 = 0;
 var grabcy: i32 = 0;
 var grab_scroll_x: f64 = 0;
 
-/// A touchpad swipe the compositor handles itself instead of passing it on.
+/// a touchpad swipe the compositor handles itself instead of passing it on
 const Swipe = struct {
     fingers: u32 = 0,
     mon: ?*Monitor = null,
@@ -40,7 +40,7 @@ var axis_scrolling: ?*Monitor = null;
 var xcursor: *wlr.XcursorManager = undefined;
 var group: *wlr.KeyboardGroup = undefined;
 var group_keyboard: Keyboard = undefined;
-/// Keys whose press ran a binding; their release is not sent to clients.
+/// keys whose press ran a binding, so their release is not sent to clients
 var consumed: std.StaticBitSet(1024) = .initEmpty();
 
 // virtual keyboards can send any keycode, so stay inside the set
@@ -172,8 +172,7 @@ pub fn monitorGone(m: *Monitor) void {
 
 pub fn keyboardEnter(s: *wlr.Surface) void {
     if (server.seat.getKeyboard()) |kb| {
-        // Leave out keys a binding took: their release never reaches the
-        // client, so it would think they stay held and repeat them.
+        // leave out keys a binding took; their release never comes, so the client would repeat them
         var keycodes: [32]u32 = undefined;
         var n: usize = 0;
         for (kb.keycodes[0..kb.num_keycodes]) |keycode| {
@@ -206,12 +205,12 @@ fn setKeymap(kb: *wlr.Keyboard) !void {
     kb.setRepeatInfo(config.repeat_rate, config.repeat_delay);
 }
 
-/// Physical keyboards share one group; virtual keyboards keep their own keymap.
+/// physical keyboards share one group; virtual keyboards keep their own keymap
 const Keyboard = struct {
     kb: *wlr.Keyboard,
     syms: [2]xkb.Keysym = .{ .NoSymbol, .NoSymbol },
     mods: u32 = 0,
-    /// The key a bar mode got, so holding it repeats there instead.
+    /// the key a bar mode got, so holding it repeats there instead
     menu_sym: ?xkb.Keysym = null,
     repeat_source: *wl.EventSource,
     key: wl.Listener(*wlr.Keyboard.event.Key) = .init(onKey),
@@ -251,8 +250,7 @@ const Keyboard = struct {
         const keycode = event.keycode + 8;
         const keymap = k.kb.keymap orelse return;
         const layout = k.kb.xkb_state.?.keyGetLayout(keycode);
-        // Match bindings on the unshifted and shifted symbols, so Mod+Shift+1
-        // works whatever symbol Shift+1 types.
+        // match unshifted and shifted symbols, so mod+shift+1 works whatever shift+1 types
         for (&k.syms, 0..) |*sym, level| {
             const syms = keymap.keyGetSymsByLevel(keycode, layout, @intCast(level));
             sym.* = if (syms.len > 0) syms[0] else .NoSymbol;
@@ -307,7 +305,7 @@ const Keyboard = struct {
 fn onNewInput(_: *wl.Listener(*wlr.InputDevice), device: *wlr.InputDevice) void {
     switch (device.type) {
         .keyboard => {
-            // The group only takes keyboards whose keymap matches its own.
+            // the group only takes keyboards whose keymap matches its own
             const kb = device.toKeyboard();
             setKeymap(kb) catch return;
             _ = group.addKeyboard(kb);
@@ -344,7 +342,7 @@ fn configurePointer(device: *wlr.InputDevice) void {
         _ = c.libinput_device_config_tap_set_drag_lock_enabled(li, @intFromBool(config.drag_lock));
         _ = c.libinput_device_config_tap_set_button_map(li, config.button_map);
     }
-    // Natural scrolling is for touchpads; mice keep the usual wheel direction.
+    // natural scrolling is for touchpads; mice keep the usual wheel direction
     if (c.libinput_device_config_scroll_has_natural_scroll(li) != 0)
         _ = c.libinput_device_config_scroll_set_natural_scroll_enabled(li, @intFromBool(config.natural_scrolling and touchpad));
     if (c.libinput_device_config_dwt_is_available(li) != 0)
@@ -389,7 +387,7 @@ fn onMotionAbsolute(_: *wl.Listener(*wlr.Pointer.event.MotionAbsolute), event: *
     motionNotify(event.time_msec, event.device, dx, dy, dx, dy);
 }
 
-/// time == 0 means nothing moved and pointer focus should just be refreshed.
+/// time == 0 means nothing moved and pointer focus should just be refreshed
 pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx_in: f64, dy_in: f64, dx_unaccel: f64, dy_unaccel: f64) void {
     const cursor = server.cursor;
     var dx = dx_in;
@@ -439,7 +437,7 @@ pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx_in: f64, dy_in: f64
 
     var hit = server.hitTest(cursor.x, cursor.y);
 
-    // While a button is held, keep sending motion to the surface it was pressed on.
+    // while a button is held, keep sending motion to the surface it was pressed on
     if (cursor_mode == .pressed and server.seat.drag == null) {
         if (server.seat.pointer_state.focused_surface) |focused| {
             if (focused != hit.surface) {
@@ -489,7 +487,7 @@ fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.even
                 const mods = clean(modifiers());
                 for (&config.buttons) |*b| {
                     if (mods == clean(b.mod) and event.button == b.button and click == b.click) {
-                        // Tag bar buttons without their own argument act on the clicked tag.
+                        // tag bar buttons without their own argument act on the clicked tag
                         b.func(if (click == .tagbar and b.arg.ui == 0) &.{ .ui = tag } else &b.arg);
                         return;
                     }
@@ -529,9 +527,7 @@ fn onAxis(_: *wl.Listener(*wlr.Pointer.event.Axis), event: *wlr.Pointer.event.Ax
     server.seat.pointerNotifyAxis(event.time_msec, event.orientation, event.delta, event.delta_discrete, event.source, event.relative_direction);
 }
 
-/// Wheels run a binding per notch. Touchpad scrolling with the scroll
-/// modifier moves the strip sideways, and runs vertical bindings once per
-/// axis_step instead of on every tiny event.
+/// bindings step per wheel notch or axis_step of touchpad travel; scroll_mod sideways moves the strip
 fn handleAxis(event: *wlr.Pointer.event.Axis) bool {
     const mods = modifiers();
     const horizontal = event.orientation == .horizontal_scroll;
@@ -596,8 +592,7 @@ fn onRequestShape(_: *wl.Listener(*wlr.CursorShapeManagerV1.event.RequestSetShap
         server.cursor.setXcursor(xcursor, wlr.CursorShapeManagerV1.shapeName(event.shape));
 }
 
-/// Apply the focused surface's pointer constraint to a motion. Returns true
-/// when the pointer is locked and must not move.
+/// apply the focused surface's pointer constraint to a motion; true when locked in place
 fn constrain(dx: *f64, dy: *f64) bool {
     const focused = server.seat.pointer_state.focused_surface;
     const want = if (focused) |f| constraints.constraintForSurface(f, server.seat) else null;
@@ -628,7 +623,7 @@ const Constraint = struct {
         const self: *Constraint = @fieldParentPtr("destroy", listener);
         if (active_constraint == con) {
             active_constraint = null;
-            // Put the cursor where the client last asked, for locked pointers.
+            // put the cursor where the client last asked, for locked pointers
             if (con.current.cursor_hint.enabled) if (Client.fromSurface(con.surface)) |cl| {
                 const hx = con.current.cursor_hint.x;
                 const hy = con.current.cursor_hint.y;
@@ -669,8 +664,7 @@ fn onSwipeBegin(_: *wl.Listener(*wlr.Pointer.event.SwipeBegin), event: *wlr.Poin
     swipe = .{ .fingers = event.fingers, .mon = monAt(server.cursor.x, server.cursor.y) orelse server.selmon };
 }
 
-/// Swipes with scroll_fingers move the strip, or the tags, with the fingers.
-/// Other swipes run their gesture once per swipe_threshold travelled.
+/// scroll_fingers move the strip or tags with them; other swipes run once per swipe_threshold
 fn onSwipeUpdate(_: *wl.Listener(*wlr.Pointer.event.SwipeUpdate), event: *wlr.Pointer.event.SwipeUpdate) void {
     lock.activity();
     const sw = &(swipe orelse return gestures.sendSwipeUpdate(server.seat, event.time_msec, event.dx, event.dy));
@@ -759,7 +753,7 @@ fn onDragIconDestroy(_: *wl.Listener(*wlr.Drag.Icon), _: *wlr.Drag.Icon) void {
     motionNotify(0, null, 0, 0, 0, 0);
 }
 
-/// Start an interactive move or resize of the client under the cursor.
+/// start an interactive move, resize or strip drag
 pub fn grab(mode: CursorMode) void {
     if (cursor_mode != .pressed) return;
     if (mode == .scroll) {

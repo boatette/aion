@@ -39,7 +39,7 @@ fn index(layer: zwlr.LayerShellV1.Layer) usize {
     return @intCast(std.math.clamp(@intFromEnum(layer), 0, 3));
 }
 
-/// Popups of background and bottom surfaces still need to show above windows.
+/// popups of background and bottom surfaces still need to show above windows
 fn popupLayer(layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
     return if (@intFromEnum(layer) < @intFromEnum(zwlr.LayerShellV1.Layer.top)) server.layers.get(.top) else sceneLayer(layer);
 }
@@ -90,7 +90,7 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const ls = l.layer_surface;
 
     if (ls.initial_commit) {
-        // Arrange with the pending state so the first configure has the right size.
+        // arrange with the pending state so the first configure has the right size
         const old = ls.current;
         ls.current = ls.pending;
         l.mon.arrangeLayers();

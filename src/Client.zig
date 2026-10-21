@@ -19,9 +19,9 @@ pub const Shell = union(enum) {
     x11: *wlr.XwaylandSurface,
 };
 
-/// Strip order; columns are runs of visible tiled clients in this list.
+/// strip order; columns are runs of visible tiled clients
 link: wl.list.Link = undefined,
-/// Focus order, most recent first.
+/// focus order, most recent first
 flink: wl.list.Link = undefined,
 owner: Server.Owner = undefined,
 shell: Shell,
@@ -39,15 +39,15 @@ fullscreen: bool = false,
 urgent: bool = false,
 suspended: bool = false,
 activated: bool = false,
-/// Joins the column of the visible tiled client before it.
+/// joins the column of the visible tiled client before it
 stacked: bool = false,
-/// Column width as a fraction of the monitor, read from a column's first client.
+/// column width as a fraction of the monitor, read from a column's first client
 width: f32 = config.default_width,
-/// Share of the column's height.
+/// share of the column's height
 weight: f32 = 1,
-/// Width to go back to when full width is toggled off.
+/// width to go back to when full width is toggled off
 saved_width: f32 = 0,
-/// Where the window last floated, to go back to when floated again.
+/// where the window last floated, to go back to when floated again
 float_geom: ?wlr.Box = null,
 resize_serial: u32 = 0,
 
@@ -95,7 +95,7 @@ pub fn createX11(_: *wl.Listener(*wlr.XwaylandSurface), xsurface: *wlr.XwaylandS
     xsurface.events.set_hints.add(&cl.set_hints);
 }
 
-/// Only valid once mapped; X11 windows have no surface before that.
+/// only valid once mapped, since x11 windows have no surface before that
 pub fn surface(cl: *const Client) *wlr.Surface {
     return switch (cl.shell) {
         .xdg => |t| t.base.surface,
@@ -110,7 +110,7 @@ pub fn mapped(cl: *const Client) bool {
     };
 }
 
-/// Override-redirect X11 windows: menus and tooltips placed by the app itself.
+/// override-redirect x11 windows: menus and tooltips the app places itself
 pub fn unmanaged(cl: *const Client) bool {
     return switch (cl.shell) {
         .xdg => false,
@@ -155,7 +155,7 @@ pub fn parent(cl: *const Client) ?*Client {
     return @ptrCast(@alignCast(data orelse return null));
 }
 
-/// _NET_WM_WINDOW_TYPE values from wlroots' xwayland.h
+/// x11 _NET_WM_WINDOW_TYPE values from wlroots' xwayland.h
 const WindowType = enum(c_int) { toolbar = 2, utility = 4, splash = 5, dialog = 6 };
 extern fn wlr_xwayland_surface_has_window_type(surface: *const wlr.XwaylandSurface, window_type: WindowType) bool;
 
@@ -164,7 +164,7 @@ fn fixed(min: i32, max: i32) bool {
     return min > 0 and min == max;
 }
 
-/// Dialogs, fixed-size windows and the like float by default.
+/// dialogs, fixed-size windows and the like float by default
 pub fn floatType(cl: *const Client) bool {
     switch (cl.shell) {
         .xdg => |t| {
@@ -222,7 +222,7 @@ pub fn setSuspended(cl: *Client, on: bool) void {
     }
 }
 
-/// Tiled windows are told so, which stops terminals snapping to whole cells.
+/// tiled windows are told so, which stops terminals snapping to whole cells
 fn setTiled(cl: *Client, on: bool) void {
     const all: wlr.Edges = .{ .top = true, .bottom = true, .left = true, .right = true };
     switch (cl.shell) {
@@ -243,7 +243,7 @@ fn setSize(cl: *Client, width: i32, height: i32) void {
             if (s.width == width and s.height == height) return;
             cl.resize_serial = t.setSize(width, height);
         },
-        // X11 windows also need their position, which changes when scrolling.
+        // x11 windows also need their position, which changes when scrolling
         .x11 => |x| if (xwayland) x.configure(
             @intCast(std.math.clamp(cl.geom.x + cl.bw, std.math.minInt(i16), std.math.maxInt(i16))),
             @intCast(std.math.clamp(cl.geom.y + cl.bw, std.math.minInt(i16), std.math.maxInt(i16))),
@@ -266,9 +266,7 @@ pub fn surfaceOrigin(cl: *const Client) [2]f64 {
     return .{ @floatFromInt(cl.geom.x + cl.bw - off[0]), @floatFromInt(cl.geom.y + cl.bw - off[1]) };
 }
 
-/// Place the client at geo (layout coordinates, borders included). Tiled
-/// clients may sit partly off their monitor; that part is clipped away so it
-/// never shows on a neighbouring output.
+/// place at geo (layout coords, borders included), clipping tiled clients to their monitor
 pub fn resize(cl: *Client, geo: wlr.Box, interact: bool) void {
     const m = cl.mon orelse return;
     if (!cl.mapped()) return;
@@ -295,7 +293,7 @@ pub fn resize(cl: *Client, geo: wlr.Box, interact: bool) void {
     cl.scene_surface.node.setPosition(bw, bw);
     cl.setSize(g.width - 2 * bw, g.height - 2 * bw);
 
-    // Visible part, relative to the client's own origin.
+    // visible part, relative to the client's own origin
     var vis: wlr.Box = .{ .x = 0, .y = 0, .width = g.width, .height = g.height };
     if (cl.tiled()) {
         var on: wlr.Box = undefined;
@@ -385,7 +383,7 @@ const Matched = struct {
     monitor: i32 = -1,
 };
 
-/// Every matching rule applies, later ones winning.
+/// every matching rule applies, later ones winning
 pub fn matchRules(cl: *const Client) Matched {
     var res: Matched = .{};
     for (config.rules) |r| {
@@ -420,8 +418,7 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const t = cl.shell.xdg;
     if (t.base.initial_commit) {
         _ = t.setWmCapabilities(.{ .fullscreen = true });
-        // Tiled windows get their column size in the first configure, so they
-        // don't draw once at a size they never keep.
+        // tiled windows get their column size in the first configure, so they never draw at another
         if (cl.matchRules().width) |w| cl.width = w;
         const size = scroll.initialSize(cl);
         _ = t.setSize(size[0], size[1]);
@@ -432,8 +429,7 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     const m = cl.mon orelse return;
     if (cl.resize_serial != 0 and cl.resize_serial <= t.base.current.configure_serial)
         cl.resize_serial = 0;
-    // Untiled windows may settle on a size other than the one asked for, like
-    // terminals snapping to whole cells, so the frame follows what they drew.
+    // untiled windows may settle on another size, like terminals snapping to cells, so the frame follows
     var geo = cl.geom;
     const s = t.base.geometry;
     if (!cl.fullscreen and (cl.floating or m.layout().arrange == null) and
@@ -487,7 +483,7 @@ fn onMap(listener: *wl.Listener(void)) void {
     if (cl.tiled()) {
         scroll.reveal(cl);
     } else if (cl.mon) |m| {
-        // Floating windows open centred on their monitor, unless an X11 app placed itself.
+        // floating windows open centred on their monitor, unless an x11 app placed itself
         const placed = cl.shell == .x11 and (cl.geom.x != 0 or cl.geom.y != 0);
         if (!placed and !cl.fullscreen) cl.resize(.{
             .x = m.w.x + @divTrunc(m.w.width - cl.geom.width, 2),
@@ -562,7 +558,7 @@ fn onRequestFullscreen(listener: *wl.Listener(void)) void {
 
 fn onRequestMaximize(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("request_maximize", listener);
-    // Maximizing means nothing here, but the protocol still wants a configure.
+    // maximizing means nothing here, but the protocol still wants a configure
     const t = cl.shell.xdg;
     if (t.base.initialized) _ = t.base.scheduleConfigure();
 }
@@ -626,7 +622,7 @@ pub fn createDecoration(_: *wl.Listener(*wlr.XdgToplevelDecorationV1), deco: *wl
     onDecorationMode(&cl.decoration_mode, deco);
 }
 
-/// Borders are drawn here, so clients never draw their own decorations.
+/// borders are drawn here, so clients never draw their own decorations
 fn onDecorationMode(listener: *wl.Listener(*wlr.XdgToplevelDecorationV1), deco: *wlr.XdgToplevelDecorationV1) void {
     const cl: *Client = @fieldParentPtr("decoration_mode", listener);
     if (cl.shell.xdg.base.initialized) _ = deco.setMode(.server_side);

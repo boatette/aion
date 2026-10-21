@@ -20,7 +20,7 @@ link: wl.list.Link = undefined,
 output: *wlr.Output,
 scene_output: *wlr.SceneOutput,
 fullscreen_bg: *wlr.SceneRect,
-/// Whole monitor, then the part left for windows, in layout coordinates.
+/// whole monitor, then the part left for windows, in layout coordinates
 m: wlr.Box = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 w: wlr.Box = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 tagset: [2]u32 = .{ 1, 1 },
@@ -28,17 +28,16 @@ seltags: u1 = 0,
 lt: [2]*const actions.Layout,
 sellt: u1 = 0,
 ltsymbol: [16:0]u8 = @splat(0),
-/// Horizontal scroll of the strip, per tag plus one for multi-tag views.
+/// strip scroll per tag, plus one for multi-tag views
 scroll: [config.tags.len + 1]i32 = @splat(0),
-/// A tag swipe in progress: the view is pushed up by offset pixels (down
-/// when negative), and the tags it is heading for follow it in.
+/// a tag swipe pushing the view up by offset pixels (down when negative) as tags slide in
 swipe: ?struct { tags: u32, offset: i32 } = null,
-/// How far down the layout being arranged is drawn.
+/// how far down the layout being arranged is drawn
 shift: i32 = 0,
-/// Layer surfaces per layer, background to overlay, newest first.
+/// layer surfaces per layer, background to overlay, newest first
 layers: [4]wl.list.Head(LayerSurface, .link) = undefined,
 lock_surface: ?*lock.LockSurface = null,
-/// Turned off by output power management; stays in the layout.
+/// turned off by output power management but kept in the layout
 asleep: bool = false,
 bar: Bar = undefined,
 
@@ -134,7 +133,7 @@ fn onDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     gpa.destroy(m);
 }
 
-/// Move everything off a monitor that is going away or being disabled.
+/// move everything off a monitor that is going away or being disabled
 fn close(m: *Monitor) void {
     if (server.selmon == m) {
         server.selmon = null;
@@ -198,7 +197,7 @@ fn applyConfig(cfg: *wlr.OutputConfigurationV1, test_only: bool) void {
         ok = output.commitState(&state) and ok;
         m.asleep = false;
         input.loadCursorScale(output.scale);
-        // Re-adding an output that didn't move would mark it manually placed.
+        // re-adding an output that didn't move would mark it manually placed
         if (output.enabled and (m.m.x != head.state.x or m.m.y != head.state.y))
             _ = server.output_layout.add(output, head.state.x, head.state.y) catch {};
     }
@@ -217,7 +216,7 @@ fn onPowerSetMode(_: *wl.Listener(*wlr.OutputPowerManagerV1.event.SetMode), even
     updateAll();
 }
 
-/// Tell output management clients how things look now.
+/// tell output management clients how things look now
 fn publishConfig() void {
     const cfg = wlr.OutputConfigurationV1.create() catch return;
     var it = server.monitors.iterator(.forward);
@@ -280,7 +279,7 @@ pub fn updateAll() void {
     Bar.redraw();
 }
 
-/// Place layer surfaces and shrink the window area by their exclusive zones.
+/// place layer surfaces and shrink the window area by their exclusive zones
 pub fn arrangeLayers(m: *Monitor) void {
     if (!m.output.enabled) return;
     var usable = m.m;
@@ -351,15 +350,14 @@ pub fn arrange(m: *Monitor) void {
 
     const lt = m.layout();
 
-    // In the floating layout every window shares one layer, so windows that
-    // were floating before don't stay pinned above the rest.
+    // the floating layout keeps every window in one layer, so earlier floaters don't stay on top
     it = server.clients.iterator(.forward);
     while (it.next()) |cl| {
         if (cl.mon != m or cl.scene.node.parent == server.layers.get(.fs)) continue;
         cl.scene.node.reparent(server.layers.get(if (cl.floating and lt.arrange != null) .float else .tile));
     }
 
-    // The incoming tags go first, so windows shared with the current view end up in it.
+    // incoming tags go first, so windows shared with the current view end up in it
     if (m.swipe) |s| {
         const cur = m.tags();
         m.tagset[m.seltags] = s.tags;
@@ -378,7 +376,7 @@ fn arrangeShifted(m: *Monitor, lt: *const actions.Layout, shift: i32) void {
     m.shift = shift;
     defer m.shift = 0;
     if (lt.arrange) |f| f(m);
-    // Layouts only place tiled windows; move the rest along with them.
+    // layouts only place tiled windows, so move the rest along with them
     var it = server.clients.iterator(.forward);
     while (it.next()) |cl| {
         if (!cl.visibleOn(m) or (cl.tiled() and lt.arrange != null)) continue;

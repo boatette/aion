@@ -32,7 +32,7 @@ pub const Key = struct {
     sym: xkb.Keysym,
     func: Func,
     arg: Arg = .{ .i = 0 },
-    /// Also runs while the session is locked.
+    /// also runs while the session is locked
     locked: bool = false,
 };
 
@@ -71,7 +71,7 @@ pub const Rule = struct {
     tags: u32 = 0,
     floating: ?bool = null,
     fullscreen: bool = false,
-    /// Column width, as a fraction of the monitor.
+    /// column width as a fraction of the monitor
     width: ?f32 = null,
     monitor: i32 = -1,
 };
@@ -113,7 +113,7 @@ pub fn spawn(arg: *const Arg) void {
     spawnArgv(arg.argv);
 }
 
-/// Double fork so children are reparented and never need reaping here.
+/// double fork so children are reparented and never need reaping here
 pub fn spawnArgv(argv: [*:null]const ?[*:0]const u8) void {
     const pid = c.fork();
     if (pid == 0) {
@@ -127,7 +127,7 @@ pub fn spawnArgv(argv: [*:null]const ?[*:0]const u8) void {
     if (pid > 0) _ = c.waitpid(pid, null, 0);
 }
 
-/// Undo what the compositor changed for itself before exec'ing a client.
+/// undo what the compositor changed for itself before exec'ing a client
 pub fn resetChild() void {
     _ = c.setsid();
     var set: c.sigset_t = undefined;
@@ -164,12 +164,11 @@ pub fn moveresize(arg: *const Arg) void {
     input.grab(if (arg.ui == 0) .move else .resize);
 }
 
-/// Drag the strip with the pointer.
 pub fn scrolldrag(_: *const Arg) void {
     input.grab(.scroll);
 }
 
-/// Keyboard-driven focus: also scrolls the window's column into view.
+/// keyboard focus, which also scrolls the window's column into view
 pub fn focus(cl: *Client) void {
     server.focus(cl, true);
     if (cl.tiled()) scroll.reveal(cl);
@@ -202,7 +201,7 @@ pub fn toggleview(arg: *const Arg) void {
     m.arrange();
 }
 
-/// Moving to another tag opens the window as that tag's last column.
+/// moving to another tag opens the window as that tag's last column
 fn retag(cl: *Client, t: u32) void {
     scroll.remove(cl);
     cl.link.remove();
@@ -243,7 +242,7 @@ fn seltag() ?i32 {
     return if (t == 0) null else @ctz(t);
 }
 
-/// Previous/next tag, without wrapping.
+/// previous or next tag, without wrapping
 pub fn viewrel(arg: *const Arg) void {
     const n = (seltag() orelse return) + arg.i;
     if (n < 0 or n >= config.tags.len) return;
@@ -294,7 +293,7 @@ pub fn togglefloating(_: *const Arg) void {
     if (sel.tiled()) {
         scroll.reveal(sel);
     } else if (sel.mon) |m| if (m.layout().arrange != null) {
-        // Pop out of the layout, centred, so it's clear the window is floating now.
+        // pop out where it last floated, or centred, so it's clear the window floats now
         sel.resize(sel.float_geom orelse blk: {
             const w: i32 = @intFromFloat(@round(config.float_size[0] * @as(f32, @floatFromInt(m.w.width))));
             const h: i32 = @intFromFloat(@round(config.float_size[1] * @as(f32, @floatFromInt(m.w.height))));
@@ -319,9 +318,7 @@ pub fn chvt(arg: *const Arg) void {
     if (server.session) |s| s.changeVt(arg.ui) catch {};
 }
 
-/// SIGKILL the focused window's process group, for apps that ignore a close. A
-/// lone pid isn't enough for apps like Steam, whose supervisor respawns a killed
-/// helper window.
+/// sigkill the whole process group, since supervisors like steam respawn a lone pid
 pub fn forcekill(_: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     const pid = sel.pid();
@@ -331,7 +328,7 @@ pub fn forcekill(_: *const Arg) void {
     _ = c.kill(pid, c.SIGKILL);
 }
 
-/// Nearest visible window in a direction, by distance between corners.
+/// nearest visible window in a direction, by distance between corners
 pub fn focusnearest(arg: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     if (sel.fullscreen) return;
@@ -363,7 +360,7 @@ fn selTiled() ?*Client {
     return if (sel.tiled() and scroll.isScrolling(m)) sel else null;
 }
 
-/// Move a window one place along the strip order; used outside the scroll layout.
+/// move a window one place along the strip order, for layouts without columns
 pub fn movestack(arg: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     var link = &sel.link;
@@ -379,8 +376,7 @@ pub fn movestack(arg: *const Arg) void {
     server.selmon.?.arrange();
 }
 
-/// h/j/k/l: columns and windows in a column in the scroll layout, the stack
-/// in monocle, and the nearest window for floating ones.
+/// columns and their windows when scrolling, the stack in monocle, else the nearest window
 pub fn focusdir(arg: *const Arg) void {
     const m = server.selmon orelse return;
     const sel = server.focustop(m) orelse return;

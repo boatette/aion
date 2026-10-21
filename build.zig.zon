@@ -1,7 +1,7 @@
 .{
     .name = .aion,
     .version = "0.0.0",
-    .fingerprint = 0xadb784e28a269adf, // Changing this has security and trust implications.
+    .fingerprint = 0xadb784e28a269adf, // changing this has security and trust implications
     .minimum_zig_version = "0.16.0",
     .dependencies = .{
         .pixman = .{

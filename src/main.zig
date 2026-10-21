@@ -27,7 +27,7 @@ fn setupSignals() void {
     const quit: posix.Sigaction = .{ .handler = .{ .handler = quitSignal }, .mask = posix.sigemptyset(), .flags = posix.SA.RESTART };
     posix.sigaction(.INT, &quit, null);
     posix.sigaction(.TERM, &quit, null);
-    // A status command exiting must not take the compositor with it.
+    // a status command exiting must not take the compositor with it
     const ignore: posix.Sigaction = .{ .handler = .{ .handler = posix.SIG.IGN }, .mask = posix.sigemptyset(), .flags = 0 };
     posix.sigaction(.PIPE, &ignore, null);
 }

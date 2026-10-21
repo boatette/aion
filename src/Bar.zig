@@ -1,6 +1,5 @@
-//! The bar: tags, layout symbol, focused title and status text, drawn with
-//! fcft into a pixman image. Text drawing follows drwl
-//! (https://codeberg.org/sewn/drwl, MIT, Copyright (c) 2023-2025 sewn).
+//! dwm-style bar drawn with fcft and pixman
+//! text drawing follows drwl (https://codeberg.org/sewn/drwl, MIT, Copyright (c) 2023-2025 sewn)
 const Bar = @This();
 
 const std = @import("std");
@@ -24,7 +23,7 @@ owner: Server.Owner,
 font: ?*c.struct_fcft_font = null,
 scale: f32 = 0,
 shown: bool = config.showbar,
-/// Height in layout coordinates, what windows make room for.
+/// height in layout coordinates, which windows make room for
 height: i32 = 0,
 /// digest of what the current buffer shows
 drawn: u64 = 0,
@@ -63,7 +62,7 @@ fn loadFont(b: *Bar, scale: f32) void {
     b.drawn = 0;
 }
 
-/// Room the bar takes at the top of the monitor, in layout coordinates.
+/// room the bar takes at the top of the monitor, in layout coordinates
 pub fn reserved(m: *Monitor) i32 {
     const b = &m.bar;
     if (!b.shown) return 0;
@@ -73,7 +72,7 @@ pub fn reserved(m: *Monitor) i32 {
     return b.height;
 }
 
-/// Redraw every bar once the current batch of events is handled.
+/// redraw every bar once the current batch of events is handled
 pub fn redraw() void {
     if (idle != null) return;
     idle = server.wl_server.getEventLoop().addIdle(?*anyopaque, drawAll, null) catch null;
@@ -137,13 +136,12 @@ pub const Painter = struct {
         return w;
     }
 
-    /// Width of s plus the usual padding, like dwm's TEXTW.
+    /// width of s plus padding, like dwm's TEXTW
     pub fn textw(p: *const Painter, s: []const u8) i32 {
         return p.textWidth(s) + p.pad();
     }
 
-    /// Fill a box with the background and draw s in it, cut short with an
-    /// ellipsis when it doesn't fit. Returns where the box ends.
+    /// fill a box and draw s in it, ellipsized if too long; returns where the box ends
     pub fn text(p: *const Painter, x0: i32, w0: i32, lpad: i32, s: []const u8, invert: bool) i32 {
         if (w0 <= 0) return x0;
         p.rect(x0, 0, w0, p.height, true, !invert);
@@ -204,11 +202,13 @@ fn codepoints(s: []const u8) Codepoints {
     return .{ .bytes = s };
 }
 
-/// Pixel memory the scene reads the bar from.
+/// pixel memory the scene reads the bar from
 const Buffer = struct {
     base: wlr.Buffer,
     data: []u32,
     stride: usize,
+
+    const drm_format_argb8888 = 0x34325241;
 
     const impl: wlr.Buffer.Impl = .{
         .destroy = destroy,
@@ -239,7 +239,7 @@ const Buffer = struct {
     fn beginAccess(base: *wlr.Buffer, _: u32, data: **anyopaque, format: *u32, stride: *usize) callconv(.c) bool {
         const buf: *Buffer = @fieldParentPtr("base", base);
         data.* = buf.data.ptr;
-        format.* = 0x34325241; // DRM_FORMAT_ARGB8888
+        format.* = drm_format_argb8888;
         stride.* = buf.stride;
         return true;
     }
@@ -329,7 +329,7 @@ fn paint(m: *Monitor, p: *Painter, width: i32) void {
     const boxs = @divTrunc(p.font.height, 9);
     const boxw = @divTrunc(p.font.height, 6) + 2;
 
-    // Status first, so tags can draw over it on a narrow monitor.
+    // status first, so tags can draw over it on a narrow monitor
     var tw: i32 = 0;
     if (selected) {
         p.scheme = config.bar_norm;
@@ -368,7 +368,7 @@ fn paint(m: *Monitor, p: *Painter, width: i32) void {
     }
 }
 
-/// Which part of the selected monitor's bar is at layout x.
+/// which part of the bar is at layout x
 pub fn clickAt(m: *Monitor, lx: f64, tag: *u32) Click {
     const b = &m.bar;
     const font = b.font orelse return .root;
@@ -391,7 +391,7 @@ pub fn status() []const u8 {
     return if (status_len == 0) "aion" else status_buf[0..status_len];
 }
 
-/// Status text comes from status_cmd's output, or stdin when there is none.
+/// status lines come from status_cmd's output, or stdin when there is none
 pub fn startStatus() void {
     var fd: c_int = 0;
     if (config.status_cmd) |argv| {
@@ -421,7 +421,7 @@ pub fn stopStatus() void {
     if (status_source) |s| s.remove();
     status_source = null;
     if (status_pid > 0) {
-        // The whole group, so a sleeping status loop goes too; KILL so the wait can't hang.
+        // the whole group so a sleeping status loop goes too, killed so the wait can't hang
         _ = c.kill(-status_pid, c.SIGKILL);
         _ = c.waitpid(status_pid, null, 0);
         status_pid = 0;

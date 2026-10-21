@@ -1,5 +1,4 @@
-//! Key modes shown in the bar: session keys (one key picks an action) and a
-//! dmenu-like launcher. A mode takes the keyboard until it ends.
+//! key modes in the bar (session keys, a dmenu-like launcher) that hold the keyboard until done
 
 const std = @import("std");
 const wl = @import("wayland").server.wl;
@@ -66,7 +65,7 @@ fn isModifier(sym: K) bool {
 
 fn sessionKey(sym: K) void {
     const lower = sym.toLower();
-    // A held Mod+x repeats x, which must not end the mode.
+    // a held mod+x repeats x, which must not end the mode
     if (isModifier(sym) or lower == K.x) return;
     setMode(.none);
     for (&config.session_keys) |*k| {
@@ -106,7 +105,7 @@ fn launchKey(mods_in: u32, sym_in: K) void {
     } else if (sym == K.Clear) {
         query_len = 0;
     } else if (sym == K.BackSpace) {
-        // Drop the last UTF-8 character.
+        // drop the last utf-8 character
         while (query_len > 0) {
             query_len -= 1;
             if (query_buf[query_len] & 0xc0 != 0x80) break;
@@ -116,7 +115,7 @@ fn launchKey(mods_in: u32, sym_in: K) void {
         if (cp < 0x20 or cp == 0x7f) return;
         var utf8: [8]u8 = undefined;
         const n = sym.toUTF8(&utf8, utf8.len);
-        // toUTF8 counts the terminating NUL.
+        // toUTF8 counts the terminating NUL
         if (n <= 1 or query_len + @as(usize, @intCast(n - 1)) > query_buf.len) return;
         const len: usize = @intCast(n - 1);
         @memcpy(query_buf[query_len..][0..len], utf8[0..len]);
@@ -141,7 +140,7 @@ fn launch(path: [:0]const u8) void {
     actions.spawnArgv(@ptrCast(&argv));
 }
 
-/// Names starting with the query first, then the rest that contain it.
+/// names starting with the query first, then the rest that contain it
 fn filter() void {
     matches.clearRetainingCapacity();
     selected = 0;
@@ -200,7 +199,7 @@ fn onApps(fd: c_int, _: wl.EventMask, _: ?*anyopaque) c_int {
     return 0;
 }
 
-/// Lines are "Name<TAB>path"; paths get NUL-terminated in place for exec.
+/// lines are "Name<TAB>path"; paths get NUL-terminated in place for exec
 fn parseApps() void {
     apps.clearRetainingCapacity();
     apps_text.append(gpa, '\n') catch return;
@@ -217,7 +216,7 @@ fn parseApps() void {
     }
 }
 
-/// Clear the rest of the bar and draw the mode's prompt; returns where it ends.
+/// clear the rest of the bar and draw the mode's prompt, returning where it ends
 fn prompt(p: *Bar.Painter, x: i32, width: i32, s: []const u8) i32 {
     p.scheme = config.bar_norm;
     p.rect(x, 0, width - x, p.height, true, true);
@@ -225,7 +224,7 @@ fn prompt(p: *Bar.Painter, x: i32, width: i32, s: []const u8) i32 {
     return p.text(x, p.textw(s), @divTrunc(p.pad(), 2), s, false);
 }
 
-/// Called by the bar on the selected monitor, with where the layout symbol ends.
+/// called by the bar on the selected monitor, with x where the layout symbol ends
 pub fn draw(p: *Bar.Painter, x0: i32, width: i32) bool {
     switch (mode) {
         .none => return false,
@@ -244,7 +243,7 @@ pub fn draw(p: *Bar.Painter, x0: i32, width: i32) bool {
             p.rect(x + @min(lpad + p.textWidth(query()), inputw - 2), @divTrunc(p.height - fh, 2) + 2, 2, fh - 4, true, false);
             x += inputw;
 
-            // Scroll so the selected match fits.
+            // scroll so the selected match fits
             const ms = matches.items;
             if (selected < first) first = selected;
             while (first < selected) : (first += 1) {

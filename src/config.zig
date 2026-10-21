@@ -19,7 +19,7 @@ const cyan = 0x005577ff;
 const red = 0xff0000ff;
 
 pub const sloppyfocus = true;
-/// Windows asking for attention get focused (switching tag if needed) instead of marked urgent.
+/// windows asking for attention get focused (switching tag if needed) instead of marked urgent
 pub const focus_on_activate = false;
 pub const borderpx = 1;
 pub const rootcolor = a.color(gray1);
@@ -32,11 +32,10 @@ pub const showbar = true;
 pub const fonts = [_][*:0]const u8{"monospace:size=10"};
 pub const bar_norm: a.Scheme = .{ .fg = gray3, .bg = gray1 };
 pub const bar_sel: a.Scheme = .{ .fg = gray4, .bg = cyan };
-/// Prints one status line at a time; null reads the status from stdin.
+/// prints one status line at a time; null reads the status from stdin
 pub const status_cmd: ?a.Arg = null;
 
-/// Mod+d launcher: apps_cmd lists "Name<TAB>path" lines, launch_cmd plus the path starts one.
-/// By default it lists the programs on PATH.
+/// apps_cmd prints "Name<TAB>path" lines for mod+d, and launch_cmd plus a path starts one
 pub const apps_cmd = a.cmd(&.{
     "sh", "-c",
     \\IFS=:; for d in $PATH; do for f in "$d"/*; do
@@ -45,7 +44,7 @@ pub const apps_cmd = a.cmd(&.{
 });
 pub const launch_cmd = [_][:0]const u8{};
 
-/// Mod+x, then one key: session actions. Any other key leaves the mode.
+/// mod+x then one of these keys; any other key leaves the mode
 pub const session_keys = [_]a.Key{
     .{ .mod = 0, .sym = K.l, .func = a.spawn, .arg = a.cmd(&.{ "loginctl", "lock-session" }) },
     .{ .mod = 0, .sym = K.u, .func = a.spawn, .arg = a.cmd(&.{ "systemctl", "suspend" }) },
@@ -56,7 +55,7 @@ pub const session_keys = [_]a.Key{
 pub const session_hint = "l lock  u suspend  e logout  r reboot  s shutdown";
 
 pub const default_width: f32 = 0.5;
-/// Size of a window floated with Mod+v the first time, as a fraction of the monitor.
+/// size of a window first floated with mod+v, as a fraction of the monitor
 pub const float_size = [2]f32{ 0.6, 0.6 };
 pub const width_presets = [_]f32{ 1.0 / 3.0, 0.5, 2.0 / 3.0 };
 
@@ -72,7 +71,7 @@ pub const monrules = [_]a.MonitorRule{
     .{},
 };
 
-/// app_id and title match as substrings. Dialogs with a parent float on their own.
+/// app_id and title match as substrings; dialogs with a parent float on their own
 pub const rules = [_]a.Rule{
     .{ .app_id = "xdg-desktop-portal-gtk", .floating = true },
     .{ .app_id = "org.gtk.FileChooserDialog", .floating = true },
@@ -108,7 +107,7 @@ const RIGHT = @intFromEnum(wlr.OutputLayout.Direction.right);
 const UP = @intFromEnum(wlr.OutputLayout.Direction.up);
 const DOWN = @intFromEnum(wlr.OutputLayout.Direction.down);
 
-/// Mod+N views tag N, Mod+Shift+N moves the window there and follows, Mod+Ctrl+N moves it quietly.
+/// mod+n views tag n, +shift moves the window there and follows, +ctrl moves it quietly
 fn tagkeys(comptime sym: xkb.Keysym, comptime i: u5) [3]a.Key {
     return .{
         .{ .mod = MOD, .sym = sym, .func = a.view, .arg = .{ .ui = 1 << i } },
@@ -117,7 +116,7 @@ fn tagkeys(comptime sym: xkb.Keysym, comptime i: u5) [3]a.Key {
     };
 }
 
-/// The same action on a vim key and its arrow.
+/// the same action on a vim key and its arrow
 fn both(comptime mod: u32, comptime vim: xkb.Keysym, comptime arrow: xkb.Keysym, comptime func: a.Func, comptime arg: a.Arg) [2]a.Key {
     return .{
         .{ .mod = mod, .sym = vim, .func = func, .arg = arg },
@@ -171,7 +170,7 @@ pub const keys = [_]a.Key{
 
     .{ .mod = MOD, .sym = K.Tab, .func = a.view, .arg = .{ .ui = 0 } },
 
-    // These also work while locked.
+    // these also work while locked
     helper(0, K.XF86AudioRaiseVolume, &.{ "wpctl", "set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", "5%+" }),
     helper(0, K.XF86AudioLowerVolume, &.{ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-" }),
     helper(0, K.XF86AudioMute, &.{ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" }),
@@ -203,8 +202,7 @@ pub const keys = [_]a.Key{
     tagkeys(K.@"6", 5) ++ tagkeys(K.@"7", 6) ++ tagkeys(K.@"8", 7) ++ tagkeys(K.@"9", 8) ++ tagkeys(K.@"0", 9) ++
     [_]a.Key{ chvt(1), chvt(2), chvt(3), chvt(4), chvt(5), chvt(6), chvt(7), chvt(8), chvt(9), chvt(10), chvt(11), chvt(12) };
 
-/// Mod with a mouse wheel: tags up and down, columns sideways. On a
-/// touchpad these fire once per axis_step of scrolling.
+/// mod with a wheel: tags up and down, columns sideways; touchpads fire once per axis_step
 pub const axes = [_]a.Axis{
     .{ .mod = MOD, .dir = .up, .func = a.viewrel, .arg = .{ .i = -1 } },
     .{ .mod = MOD, .dir = .down, .func = a.viewrel, .arg = .{ .i = 1 } },
@@ -216,18 +214,13 @@ pub const axes = [_]a.Axis{
     .{ .mod = MOD | CTRL, .dir = .right, .func = a.movecolumn, .arg = .{ .i = 1 } },
 };
 pub const axis_step = 40.0;
-/// Touchpad scrolling sideways while holding this moves the strip, overriding the
-/// horizontal axes above.
+/// sideways touchpad scrolling with this held moves the strip instead of running the axes above
 pub const scroll_mod = MOD;
 
-/// Swiping sideways with this many fingers moves the strip under them; it
-/// snaps to the column nearest the middle when they lift. Swiping up or down
-/// slides in the next or previous tag, which is viewed if it came at least
-/// swipe_threshold.
+/// fingers that drag the strip sideways, or slide in the next (up) or previous (down) tag
 pub const scroll_fingers = 3;
 pub const swipe_speed = 1.0;
-/// Other swipes run once per this much travel. Content follows the
-/// fingers: swiping up shows the next tag.
+/// travel that views a slid-in tag on release, and that other swipes need per step
 pub const swipe_threshold = 120.0;
 pub const gestures = [_]a.Gesture{
     .{ .fingers = 4, .dir = .left, .func = a.movecolumn, .arg = .{ .i = -1 } },

@@ -1,4 +1,4 @@
-//! Session lock (swaylock) and idle notification (swayidle).
+//! session lock (swaylock) and idle notification (swayidle)
 
 const std = @import("std");
 const wl = @import("wayland").server.wl;
@@ -36,7 +36,7 @@ pub fn activity() void {
     idle_notifier.notifyActivity(server.seat);
 }
 
-/// Called when the output layout changes.
+/// called when the output layout changes
 pub fn updateLayout(all: wlr.Box) void {
     locked_bg.node.setPosition(all.x, all.y);
     locked_bg.setSize(all.width, all.height);
@@ -51,7 +51,7 @@ pub fn monitorGone(m: *Monitor) void {
     gpa.destroy(ls);
 }
 
-/// Idle is inhibited while an inhibiting surface is actually on screen.
+/// idle is inhibited while an inhibiting surface is actually on screen
 pub fn checkInhibitors(exclude: ?*wlr.Surface) void {
     var inhibited = false;
     var it = inhibit_manager.inhibitors.iterator(.forward);
@@ -116,7 +116,7 @@ const Lock = struct {
         l.finish(true);
     }
 
-    /// The locker went away without unlocking, so the session stays locked.
+    /// the locker went away without unlocking, so the session stays locked
     fn onDestroy(listener: *wl.Listener(void)) void {
         const l: *Lock = @fieldParentPtr("destroy", listener);
         l.finish(false);

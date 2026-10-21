@@ -39,8 +39,7 @@ const custom_protocols = [_][]const u8{
     "wlr-virtual-pointer-unstable-v1.xml",
 };
 
-// Server-side bindings only need to cover what the compositor calls itself;
-// wlroots advertises its own versions.
+// server-side bindings only cover what aion calls; wlroots advertises its own versions
 const generated = [_]struct { []const u8, u32 }{
     .{ "wl_compositor", 4 },
     .{ "wl_subcompositor", 1 },
@@ -100,7 +99,7 @@ pub fn build(b: *Build) void {
     wlroots.addImport("wayland", wayland);
     wlroots.addImport("xkbcommon", xkbcommon);
     wlroots.addImport("pixman", pixman);
-    // @cImport("wlr/version.h") in the bindings reads this module's include path.
+    // @cImport("wlr/version.h") in the bindings reads this module's include path
     wlroots.resolved_target = target;
     wlroots.linkSystemLibrary("wlroots-0.20", .{});
 
@@ -112,7 +111,7 @@ pub fn build(b: *Build) void {
     });
     c.linkSystemLibrary("libinput", .{});
     c.linkSystemLibrary("fcft", .{});
-    // Nix has no /usr/include. The flake exports these; other systems use the compiler default.
+    // nix has no /usr/include, so the flake exports these; elsewhere the compiler default works
     if (b.graph.environ_map.get("AION_LIBC_INCLUDE")) |path| c.addAfterIncludePath(.{ .cwd_relative = path });
     if (b.graph.environ_map.get("AION_LINUX_HEADERS")) |path| c.addAfterIncludePath(.{ .cwd_relative = path });
 
