@@ -265,7 +265,7 @@ pub fn neighbour(cl: *const Client, dir: i32, far: bool) ?Column {
     var found: ?Column = null;
     while (it.next()) |col| {
         if (dir < 0) {
-            if (col.index == own.index) return if (far) found orelse null else prev;
+            if (col.index == own.index) return if (far) found else prev;
             if (found == null) found = col;
         } else if (col.index > own.index) {
             if (!far) return col;

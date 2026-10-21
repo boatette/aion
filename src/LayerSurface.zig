@@ -25,7 +25,7 @@ commit: wl.Listener(*wlr.Surface) = .init(onCommit),
 unmap: wl.Listener(void) = .init(onUnmap),
 destroy: wl.Listener(*wlr.LayerSurfaceV1) = .init(onDestroy),
 
-pub fn sceneLayer(layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
+fn sceneLayer(layer: zwlr.LayerShellV1.Layer) *wlr.SceneTree {
     return server.layers.get(switch (layer) {
         .background => .bg,
         .bottom => .bottom,

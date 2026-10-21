@@ -472,7 +472,7 @@ fn onButton(_: *wl.Listener(*wlr.Pointer.event.Button), event: *wlr.Pointer.even
         .pressed => {
             cursor_mode = .pressed;
             server.selmon = monAt(server.cursor.x, server.cursor.y) orelse server.selmon;
-            if (locked) {} else {
+            if (!locked) {
                 const hit = server.hitTest(server.cursor.x, server.cursor.y);
                 if (hit.client) |cl| {
                     if (cl.unmanaged()) {

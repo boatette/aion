@@ -406,13 +406,12 @@ fn applyRules(cl: *Client) void {
     if (r.width) |w| cl.width = w;
     if (r.fullscreen) cl.fullscreen = true;
     var m = server.selmon;
-    if (r.monitor >= 0) {
-        var i: i32 = 0;
-        var it = server.monitors.iterator(.forward);
-        while (it.next()) |mon| : (i += 1) if (i == r.monitor) {
-            m = mon;
-        };
-    }
+    var i: i32 = 0;
+    var it = server.monitors.iterator(.forward);
+    while (it.next()) |mon| : (i += 1) if (i == r.monitor) {
+        m = mon;
+        break;
+    };
     cl.setMon(m, r.tags & @import("actions.zig").tagmask());
 }
 
