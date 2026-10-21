@@ -19,6 +19,8 @@ var mode: Mode = .none;
 
 const App = struct { name: []const u8, path: [:0]const u8 };
 var apps_text: std.ArrayList(u8) = .empty;
+/// the next list, swapped in once its command finishes
+var loading: std.ArrayList(u8) = .empty;
 var apps: std.ArrayList(App) = .empty;
 var matches: std.ArrayList(usize) = .empty;
 var selected: usize = 0;
@@ -153,12 +155,10 @@ fn filter() void {
     }
 }
 
-/// Read the app list again every time, so new installs show up. It loads in
-/// the background; typing filters whatever has arrived.
+/// reload the list every time so new installs show up; the old one stays usable meanwhile
 fn loadApps() void {
     if (loader_source != null) return;
-    apps_text.clearRetainingCapacity();
-    apps.clearRetainingCapacity();
+    loading.clearRetainingCapacity();
     var fds: [2]c_int = undefined;
     if (c.pipe(&fds) != 0) return;
     const pid = c.fork();
@@ -184,13 +184,16 @@ fn onApps(fd: c_int, _: wl.EventMask, _: ?*anyopaque) c_int {
     var chunk: [4096]u8 = undefined;
     const n = c.read(fd, &chunk, chunk.len);
     if (n > 0) {
-        apps_text.appendSlice(gpa, chunk[0..@intCast(n)]) catch {};
+        loading.appendSlice(gpa, chunk[0..@intCast(n)]) catch {};
         return 0;
     }
     loader_source.?.remove();
     loader_source = null;
     _ = c.close(fd);
     _ = c.waitpid(loader_pid, null, 0);
+    // a failed command keeps the old list
+    if (loading.items.len == 0) return 0;
+    std.mem.swap(std.ArrayList(u8), &apps_text, &loading);
     parseApps();
     filter();
     Bar.redraw();
