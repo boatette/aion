@@ -101,7 +101,13 @@ fn createInner(output: *wlr.Output) !void {
 
 fn onFrame(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
     const m: *Monitor = @fieldParentPtr("frame", listener);
-    _ = m.scene_output.commit(null);
+    if (!m.scene_output.commit(null)) {
+        // a scanned out buffer can pass the test commit and still fail the real one, composite instead
+        const scanout = server.scene.private.direct_scanout;
+        server.scene.private.direct_scanout = false;
+        if (!m.scene_output.commit(null)) log.err("could not commit output {s}", .{m.output.name});
+        server.scene.private.direct_scanout = scanout;
+    }
     var now: std.posix.timespec = undefined;
     _ = std.c.clock_gettime(.MONOTONIC, &now);
     m.scene_output.sendFrameDone(&now);
