@@ -365,12 +365,12 @@ pub fn startStatus() void {
             c._exit(127);
         }
         _ = c.close(fds[1]);
+        _ = c.fcntl(fds[0], c.F_SETFD, c.FD_CLOEXEC);
         status_pid = pid;
         fd = fds[0];
     } else if (c.isatty(0) != 0) {
         return;
     }
-    _ = c.fcntl(fd, c.F_SETFD, c.FD_CLOEXEC);
     status_source = server.wl_server.getEventLoop().addFd(?*anyopaque, fd, .{ .readable = true }, onStatus, null) catch null;
 }
 
@@ -378,22 +378,21 @@ pub fn stopStatus() void {
     if (status_source) |s| s.remove();
     status_source = null;
     if (status_pid > 0) {
-        // The whole group, so a sleeping status loop goes too.
-        _ = c.kill(-status_pid, c.SIGTERM);
+        // The whole group, so a sleeping status loop goes too; KILL so the wait can't hang.
+        _ = c.kill(-status_pid, c.SIGKILL);
         _ = c.waitpid(status_pid, null, 0);
         status_pid = 0;
     }
 }
 
-fn onStatus(fd: c_int, mask: wl.EventMask, _: ?*anyopaque) c_int {
+fn onStatus(fd: c_int, _: wl.EventMask, _: ?*anyopaque) c_int {
     var chunk: [512]u8 = undefined;
     const n = c.read(fd, &chunk, chunk.len);
-    if (n <= 0 or mask.hangup or mask.@"error") {
-        if (n <= 0) {
-            stopStatus();
-            _ = c.close(fd);
-            return 0;
-        }
+    if (n <= 0) {
+        stopStatus();
+        // a closed stdin would hand fd 0 to whatever opens next
+        if (fd != 0) _ = c.close(fd);
+        return 0;
     }
     var changed = false;
     for (chunk[0..@intCast(n)]) |ch| {
