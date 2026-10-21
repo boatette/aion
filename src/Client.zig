@@ -417,10 +417,20 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         if (cl.decoration) |d| _ = d.setMode(.server_side);
         return;
     }
-    if (cl.mon == null) return;
-    cl.resize(cl.geom, cl.floating and !cl.fullscreen);
+    const m = cl.mon orelse return;
     if (cl.resize_serial != 0 and cl.resize_serial <= t.base.current.configure_serial)
         cl.resize_serial = 0;
+    // Untiled windows may settle on a size other than the one asked for, like
+    // terminals snapping to whole cells, so the frame follows what they drew.
+    var geo = cl.geom;
+    const s = t.base.geometry;
+    if (!cl.fullscreen and (cl.floating or m.layout().arrange == null) and
+        cl.resize_serial == 0 and s.width > 0 and s.height > 0)
+    {
+        geo.width = s.width + 2 * cl.bw;
+        geo.height = s.height + 2 * cl.bw;
+    }
+    cl.resize(geo, cl.floating and !cl.fullscreen);
 }
 
 fn onMap(listener: *wl.Listener(void)) void {
