@@ -43,6 +43,15 @@ var group_keyboard: Keyboard = undefined;
 /// Keys whose press ran a binding; their release is not sent to clients.
 var consumed: std.StaticBitSet(1024) = .initEmpty();
 
+// virtual keyboards can send any keycode, so stay inside the set
+fn consume(keycode: u32) void {
+    if (keycode < consumed.capacity()) consumed.set(keycode);
+}
+
+fn isConsumed(keycode: u32) bool {
+    return keycode < consumed.capacity() and consumed.isSet(keycode);
+}
+
 var new_input: wl.Listener(*wlr.InputDevice) = .init(onNewInput);
 var motion: wl.Listener(*wlr.Pointer.event.Motion) = .init(onMotion);
 var motion_absolute: wl.Listener(*wlr.Pointer.event.MotionAbsolute) = .init(onMotionAbsolute);
@@ -161,7 +170,7 @@ pub fn keyboardEnter(s: *wlr.Surface) void {
         var keycodes: [32]u32 = undefined;
         var n: usize = 0;
         for (kb.keycodes[0..kb.num_keycodes]) |keycode| {
-            if (keycode < consumed.capacity() and consumed.isSet(keycode)) continue;
+            if (isConsumed(keycode)) continue;
             keycodes[n] = keycode;
             n += 1;
         }
@@ -248,7 +257,7 @@ const Keyboard = struct {
         if (event.state == .pressed and !locked and menu.active()) {
             const sym = k.kb.xkb_state.?.keyGetOneSym(keycode);
             k.menu_sym = sym;
-            consumed.set(event.keycode);
+            consume(event.keycode);
             menu.key(k.mods, sym);
             k.repeat_source.timerUpdate(@max(k.kb.repeat_info.delay, 0)) catch {};
             return;
@@ -257,7 +266,7 @@ const Keyboard = struct {
         var handled = false;
         if (event.state == .pressed) {
             if (k.binding()) |key| {
-                consumed.set(event.keycode);
+                consume(event.keycode);
                 key.func(&key.arg);
                 handled = true;
             }
@@ -265,7 +274,7 @@ const Keyboard = struct {
         k.repeat_source.timerUpdate(if (handled) @max(k.kb.repeat_info.delay, 0) else 0) catch {};
         if (handled) return;
 
-        if (event.keycode < consumed.capacity() and consumed.isSet(event.keycode)) {
+        if (isConsumed(event.keycode)) {
             if (event.state == .released) consumed.unset(event.keycode);
             return;
         }
