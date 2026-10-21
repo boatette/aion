@@ -287,10 +287,19 @@ pub fn setlayout(arg: *const Arg) void {
 pub fn togglefloating(_: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     if (sel.fullscreen) return;
-    if (!sel.floating) scroll.remove(sel);
+    if (sel.floating) sel.float_geom = sel.geom else scroll.remove(sel);
     sel.stacked = false;
     sel.setFloating(!sel.floating);
-    if (sel.tiled()) scroll.reveal(sel);
+    if (sel.tiled()) {
+        scroll.reveal(sel);
+    } else if (sel.mon) |m| if (m.layout().arrange != null) {
+        // Pop out of the layout, centred, so it's clear the window is floating now.
+        sel.resize(sel.float_geom orelse blk: {
+            const w: i32 = @intFromFloat(@round(config.float_size[0] * @as(f32, @floatFromInt(m.w.width))));
+            const h: i32 = @intFromFloat(@round(config.float_size[1] * @as(f32, @floatFromInt(m.w.height))));
+            break :blk .{ .x = m.w.x + @divTrunc(m.w.width - w, 2), .y = m.w.y + @divTrunc(m.w.height - h, 2), .width = w, .height = h };
+        }, false);
+    };
 }
 
 pub fn togglebar(_: *const Arg) void {

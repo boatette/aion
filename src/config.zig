@@ -56,6 +56,8 @@ pub const session_keys = [_]a.Key{
 pub const session_hint = "l lock  u suspend  e logout  r reboot  s shutdown";
 
 pub const default_width: f32 = 0.5;
+/// Size of a window floated with Mod+v the first time, as a fraction of the monitor.
+pub const float_size = [2]f32{ 0.6, 0.6 };
 pub const width_presets = [_]f32{ 1.0 / 3.0, 0.5, 2.0 / 3.0 };
 
 pub const tags = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };

@@ -47,6 +47,8 @@ width: f32 = config.default_width,
 weight: f32 = 1,
 /// Width to go back to when full width is toggled off.
 saved_width: f32 = 0,
+/// Where the window last floated, to go back to when floated again.
+float_geom: ?wlr.Box = null,
 resize_serial: u32 = 0,
 
 commit: wl.Listener(*wlr.Surface) = .init(onCommit),
