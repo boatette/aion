@@ -541,7 +541,6 @@ fn handleAxis(event: *wlr.Pointer.event.Axis) bool {
     };
     if (smooth and horizontal and clean(mods) == clean(config.scroll_mod)) {
         const m = monAt(server.cursor.x, server.cursor.y) orelse return false;
-        if (!scroll.isScrolling(m)) return false;
         if (event.delta != 0) {
             scroll.scrollBy(m, event.delta * config.swipe_speed);
             axis_scrolling = m;

@@ -2,7 +2,6 @@ const wlr = @import("wlroots");
 const xkb = @import("xkbcommon");
 const c = @import("c");
 const a = @import("actions.zig");
-const scroll = @import("scroll.zig");
 const menu = @import("menu.zig");
 
 const K = xkb.Keysym;
@@ -60,12 +59,6 @@ pub const float_size = [2]f32{ 0.6, 0.6 };
 pub const width_presets = [_]f32{ 1.0 / 3.0, 0.5, 2.0 / 3.0 };
 
 pub const tags = [_][]const u8{ "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };
-
-pub const layouts = [_]a.Layout{
-    .{ .symbol = "[S]", .arrange = scroll.arrange },
-    .{ .symbol = "><>", .arrange = null },
-    .{ .symbol = "[M]", .arrange = scroll.monocle },
-};
 
 pub const monrules = [_]a.MonitorRule{
     .{},
@@ -161,12 +154,8 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD | SHIFT, .sym = K.Home, .func = a.movecolumnend, .arg = .{ .i = -1 } },
     .{ .mod = MOD | SHIFT, .sym = K.End, .func = a.movecolumnend, .arg = .{ .i = 1 } },
 
-    .{ .mod = MOD, .sym = K.a, .func = a.setlayout, .arg = .{ .v = &layouts[2] } },
     .{ .mod = MOD | SHIFT, .sym = K.f, .func = a.togglefullscreen },
     .{ .mod = MOD | CTRL, .sym = K.f, .func = a.togglefullscreen },
-    .{ .mod = MOD, .sym = K.o, .func = a.setlayout, .arg = .{ .v = null } },
-    .{ .mod = MOD | SHIFT, .sym = K.o, .func = a.setlayout, .arg = .{ .v = &layouts[1] } },
-    .{ .mod = MOD | CTRL, .sym = K.o, .func = a.setlayout, .arg = .{ .v = &layouts[0] } },
 
     .{ .mod = MOD, .sym = K.Tab, .func = a.view, .arg = .{ .ui = 0 } },
 
@@ -230,8 +219,6 @@ pub const gestures = [_]a.Gesture{
 };
 
 pub const buttons = [_]a.Button{
-    .{ .click = .ltsymbol, .mod = 0, .button = c.BTN_LEFT, .func = a.setlayout, .arg = .{ .v = &layouts[0] } },
-    .{ .click = .ltsymbol, .mod = 0, .button = c.BTN_RIGHT, .func = a.setlayout, .arg = .{ .v = &layouts[2] } },
     .{ .click = .title, .mod = 0, .button = c.BTN_MIDDLE, .func = a.centercolumn },
     .{ .click = .client, .mod = MOD, .button = c.BTN_LEFT, .func = a.moveresize, .arg = .{ .ui = 0 } },
     .{ .click = .client, .mod = MOD, .button = c.BTN_RIGHT, .func = a.moveresize, .arg = .{ .ui = 1 } },

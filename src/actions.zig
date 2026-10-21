@@ -9,7 +9,6 @@ const input = @import("input.zig");
 const scroll = @import("scroll.zig");
 const server = &@import("main.zig").server;
 const Client = @import("Client.zig");
-const Monitor = @import("Monitor.zig");
 
 pub const SHIFT: u32 = 1 << 0;
 pub const CTRL: u32 = 1 << 2;
@@ -60,11 +59,6 @@ pub const Gesture = struct {
     arg: Arg = .{ .i = 0 },
 };
 
-pub const Layout = struct {
-    symbol: [:0]const u8,
-    arrange: ?*const fn (*Monitor) void,
-};
-
 pub const Rule = struct {
     app_id: ?[]const u8 = null,
     title: ?[]const u8 = null,
@@ -79,7 +73,6 @@ pub const Rule = struct {
 pub const MonitorRule = struct {
     name: ?[]const u8 = null,
     scale: f32 = 1,
-    layout: *const Layout = &config.layouts[0],
     transform: wl.Output.Transform = .normal,
     x: i32 = -1,
     y: i32 = -1,
@@ -284,15 +277,6 @@ pub fn tagmon(arg: *const Arg) void {
     sel.setMon(m, 0);
 }
 
-pub fn setlayout(arg: *const Arg) void {
-    const m = server.selmon orelse return;
-    const lt: ?*const Layout = @ptrCast(@alignCast(arg.v));
-    if (lt == null or lt.? != m.layout()) m.sellt ^= 1;
-    if (lt) |l| m.lt[m.sellt] = l;
-    m.arrange();
-    if (server.focustop(m)) |sel| if (sel.tiled()) scroll.reveal(sel);
-}
-
 pub fn togglefloating(_: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     if (sel.fullscreen) return;
@@ -301,14 +285,14 @@ pub fn togglefloating(_: *const Arg) void {
     sel.setFloating(!sel.floating);
     if (sel.tiled()) {
         scroll.reveal(sel);
-    } else if (sel.mon) |m| if (m.layout().arrange != null) {
+    } else if (sel.mon) |m| {
         // pop out where it last floated, or centred, so it's clear the window floats now
         sel.resize(sel.float_geom orelse blk: {
             const w: i32 = @intFromFloat(@round(config.float_size[0] * @as(f32, @floatFromInt(m.w.width))));
             const h: i32 = @intFromFloat(@round(config.float_size[1] * @as(f32, @floatFromInt(m.w.height))));
             break :blk .{ .x = m.w.x + @divTrunc(m.w.width - w, 2), .y = m.w.y + @divTrunc(m.w.height - h, 2), .width = w, .height = h };
         }, false);
-    };
+    }
 }
 
 pub fn togglebar(_: *const Arg) void {
@@ -366,32 +350,15 @@ pub fn focusnearest(arg: *const Arg) void {
 fn selTiled() ?*Client {
     const m = server.selmon orelse return null;
     const sel = server.focustop(m) orelse return null;
-    return if (sel.tiled() and scroll.isScrolling(m)) sel else null;
+    return if (sel.tiled()) sel else null;
 }
 
-/// move a window one place along the strip order, for layouts without columns
-pub fn movestack(arg: *const Arg) void {
-    const sel = server.focustop(server.selmon) orelse return;
-    var link = &sel.link;
-    while (true) {
-        link = if (arg.i > 0) link.next.? else link.prev.?;
-        if (link == &sel.link) return;
-        if (link == &server.clients.link) continue;
-        const cl: *Client = @fieldParentPtr("link", link);
-        if (cl.visibleOn(server.selmon)) break;
-    }
-    sel.link.remove();
-    if (arg.i > 0) link.insert(&sel.link) else link.prev.?.insert(&sel.link);
-    server.selmon.?.arrange();
-}
-
-/// columns and their windows when scrolling, the stack in monocle, else the nearest window
+/// columns and their windows when tiled, else the nearest window
 pub fn focusdir(arg: *const Arg) void {
     const m = server.selmon orelse return;
     const sel = server.focustop(m) orelse return;
     const dir: Dir = @fromBackingInt(@intCast(arg.ui));
     const step: i32 = if (dir == .left or dir == .up) -1 else 1;
-    if (m.layout().arrange == scroll.monocle) return focusstack(&.{ .i = step });
     if (selTiled() == null) return focusnearest(arg);
     switch (dir) {
         .left, .right => if (scroll.neighbour(sel, step, false)) |col| focus(scroll.lastFocused(col)),
@@ -411,7 +378,7 @@ pub fn focusend(arg: *const Arg) void {
 }
 
 pub fn movecolumn(arg: *const Arg) void {
-    const sel = selTiled() orelse return movestack(arg);
+    const sel = selTiled() orelse return;
     scroll.moveColumn(sel, arg.i, false);
 }
 
@@ -421,7 +388,7 @@ pub fn movecolumnend(arg: *const Arg) void {
 }
 
 pub fn movewindow(arg: *const Arg) void {
-    const sel = selTiled() orelse return movestack(arg);
+    const sel = selTiled() orelse return;
     scroll.moveWindow(sel, arg.i);
 }
 

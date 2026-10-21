@@ -289,8 +289,8 @@ pub fn resize(cl: *Client, geo: wlr.Box, interact: bool) void {
     }
 
     const g = cl.geom;
-    // layouts put a swipe in tiled geometry, other windows have to keep it when they commit
-    const shift = if (cl.tiled() and m.layout().arrange != null) 0 else m.swipeShift(cl.tags);
+    // the strip puts a swipe in tiled geometry, other windows have to keep it when they commit
+    const shift = if (cl.tiled()) 0 else m.swipeShift(cl.tags);
     cl.scene.node.setPosition(g.x, g.y + shift);
     cl.scene_surface.node.setPosition(bw, bw);
     cl.setSize(g.width - 2 * bw, g.height - 2 * bw);
@@ -355,7 +355,7 @@ pub fn setFloating(cl: *Client, on: bool) void {
     cl.floating = on;
     cl.setTiled(!on);
     const m = cl.mon orelse return;
-    if (!cl.mapped() or m.layout().arrange == null) return;
+    if (!cl.mapped()) return;
     const p = cl.parent();
     cl.scene.node.reparent(server.layers.get(if (cl.fullscreen or (p != null and p.?.fullscreen)) .fs else if (on) .float else .tile));
     m.arrange();
@@ -428,13 +428,13 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         if (cl.decoration) |d| _ = d.setMode(.server_side);
         return;
     }
-    const m = cl.mon orelse return;
+    if (cl.mon == null) return;
     if (cl.resize_serial != 0 and cl.resize_serial <= t.base.current.configure_serial)
         cl.resize_serial = 0;
     // untiled windows may settle on another size, like terminals snapping to cells, so the frame follows
     var geo = cl.geom;
     const s = t.base.geometry;
-    if (!cl.fullscreen and (cl.floating or m.layout().arrange == null) and
+    if (!cl.fullscreen and cl.floating and
         cl.resize_serial == 0 and s.width > 0 and s.height > 0)
     {
         geo.width = s.width + 2 * cl.bw;
@@ -588,7 +588,7 @@ fn onRequestConfigure(listener: *wl.Listener(*wlr.XwaylandSurface.event.Configur
         return;
     }
     const m = cl.mon orelse return;
-    if (cl.floating or m.layout().arrange == null) {
+    if (cl.floating) {
         cl.resize(.{
             .x = event.x - cl.bw,
             .y = event.y - cl.bw,

@@ -2,7 +2,7 @@
 
 A dwl-like Wayland compositor with a scrolling layout, written in Zig on wlroots.
 
-Windows sit in columns on an endless horizontal strip, one strip per tag and monitor. A column can hold several windows stacked vertically. Everything else is dwl: tags, a dwm-style bar, monocle and floating layouts, rules, and a config file compiled in.
+Windows sit in columns on an endless horizontal strip, one strip per tag and monitor. A column can hold several windows stacked vertically. Everything else is dwl: tags, a dwm-style bar, floating windows, rules, and a config file compiled in.
 
 ## Building
 
@@ -63,8 +63,6 @@ The bar reads one status line at a time from `status_cmd`'s output, or from stdi
 | Mod+f                          | toggle a full-width column                                                |
 | Mod+c                          | centre the column                                                         |
 | Mod+Home/End, +Shift           | focus or move to the first/last column                                    |
-| Mod+a                          | monocle                                                                   |
-| Mod+o, Mod+Shift+o, Mod+Ctrl+o | previous layout, floating, scrolling                                      |
 | Mod+Shift+f, Mod+Ctrl+f        | fullscreen                                                                |
 | Mod+1..0, +Shift, +Ctrl        | view tag; move the window there and follow; move it there and stay        |
 | Mod+g                          | view every tag                                                            |

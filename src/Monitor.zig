@@ -6,7 +6,6 @@ const wl = @import("wayland").server.wl;
 const wlr = @import("wlroots");
 
 const config = @import("config.zig");
-const actions = @import("actions.zig");
 const input = @import("input.zig");
 const server = &@import("main.zig").server;
 const Client = @import("Client.zig");
@@ -25,8 +24,6 @@ m: wlr.Box = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 w: wlr.Box = .{ .x = 0, .y = 0, .width = 0, .height = 0 },
 tagset: [2]u32 = .{ 1, 1 },
 seltags: u1 = 0,
-lt: [2]*const actions.Layout,
-sellt: u1 = 0,
 ltsymbol: [16:0]u8 = @splat(0),
 /// strip scroll per tag, plus one for multi-tag views
 scroll: [config.tags.len + 1]i32 = @splat(0),
@@ -74,7 +71,6 @@ fn createInner(output: *wlr.Output) !void {
         .output = output,
         .scene_output = scene_output,
         .fullscreen_bg = fullscreen_bg,
-        .lt = .{ rule.layout, &config.layouts[1] },
     };
     for (&m.layers) |*l| l.init();
     try m.bar.init(m);
@@ -335,10 +331,6 @@ pub fn tags(m: *const Monitor) u32 {
     return m.tagset[m.seltags];
 }
 
-pub fn layout(m: *const Monitor) *const actions.Layout {
-    return m.lt[m.sellt];
-}
-
 pub fn arrange(m: *Monitor) void {
     if (!m.output.enabled) return;
     const incoming: u32 = if (m.swipe) |s| s.tags else 0;
@@ -356,24 +348,20 @@ pub fn arrange(m: *Monitor) void {
     m.fullscreen_bg.node.setEnabled(fs);
     if (fs) m.fullscreen_bg.node.setPosition(m.m.x, m.m.y + m.swipeShift(top.?.tags));
 
-    const lt = m.layout();
-
-    // the floating layout keeps every window in one layer, so earlier floaters don't stay on top
     it = server.clients.iterator(.forward);
     while (it.next()) |cl| {
         if (cl.mon != m or cl.scene.node.parent == server.layers.get(.fs)) continue;
-        cl.scene.node.reparent(server.layers.get(if (cl.floating and lt.arrange != null) .float else .tile));
+        cl.scene.node.reparent(server.layers.get(if (cl.floating) .float else .tile));
     }
 
     // incoming tags go first, so windows shared with the current view end up in it
     if (m.swipe) |s| {
         const cur = m.tags();
         m.tagset[m.seltags] = s.tags;
-        m.arrangeShifted(lt, m.swipeShift(s.tags));
+        m.arrangeShifted(m.swipeShift(s.tags));
         m.tagset[m.seltags] = cur;
     }
-    m.setSymbol(lt.symbol);
-    m.arrangeShifted(lt, m.swipeShift(m.tags()));
+    m.arrangeShifted(m.swipeShift(m.tags()));
     // counts and occupied tags may have changed; the bar skips drawing if nothing did
     Bar.redraw();
     input.motionNotify(0, null, 0, 0, 0, 0);
@@ -388,14 +376,14 @@ pub fn swipeShift(m: *const Monitor, t: u32) i32 {
     return 0;
 }
 
-fn arrangeShifted(m: *Monitor, lt: *const actions.Layout, shift: i32) void {
+fn arrangeShifted(m: *Monitor, shift: i32) void {
     m.shift = shift;
     defer m.shift = 0;
-    if (lt.arrange) |f| f(m);
-    // layouts only place tiled windows, so move the rest along with them
+    @import("scroll.zig").arrange(m);
+    // the strip only places tiled windows, so move the rest along with them
     var it = server.clients.iterator(.forward);
     while (it.next()) |cl| {
-        if (!cl.visibleOn(m) or (cl.tiled() and lt.arrange != null)) continue;
+        if (!cl.visibleOn(m) or cl.tiled()) continue;
         cl.scene.node.setPosition(cl.geom.x, cl.geom.y + shift);
     }
 }

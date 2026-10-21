@@ -30,10 +30,6 @@ pub fn tiledOn(cl: *const Client, m: *const Monitor) bool {
     return cl.tiled() and cl.visibleOn(m);
 }
 
-pub fn isScrolling(m: *const Monitor) bool {
-    return m.layout().arrange == arrange;
-}
-
 pub fn columnWidth(cl: *const Client, m: *const Monitor) i32 {
     const w: i32 = @intFromFloat(@round(cl.width * @as(f32, @floatFromInt(m.w.width))));
     return std.math.clamp(w, 1, @max(m.w.width, 1));
@@ -145,25 +141,9 @@ pub fn arrange(m: *Monitor) void {
     m.setSymbol(symbol);
 }
 
-pub fn monocle(m: *Monitor) void {
-    var area = m.w;
-    area.y += m.shift;
-    var n: u32 = 0;
-    var it = server.clients.iterator(.forward);
-    while (it.next()) |cl| {
-        if (!tiledOn(cl, m)) continue;
-        cl.resize(area, false);
-        n += 1;
-    }
-    var buf: [16]u8 = undefined;
-    if (n > 0) m.setSymbol(std.fmt.bufPrint(&buf, "[{d}]", .{n}) catch "[M]");
-    if (server.focustop(m)) |cl| cl.scene.node.raiseToTop();
-}
-
 /// scroll just enough for the client's column to be fully visible
 pub fn reveal(cl: *Client) void {
     const m = cl.mon orelse return;
-    if (!isScrolling(m)) return;
     const col = columnOf(cl) orelse return;
     const s = &m.scroll[slot(m)];
     if (col.w >= m.w.width or col.x < s.*) {
@@ -176,7 +156,6 @@ pub fn reveal(cl: *Client) void {
 
 pub fn center(cl: *Client) void {
     const m = cl.mon orelse return;
-    if (!isScrolling(m)) return;
     const col = columnOf(cl) orelse return;
     m.scroll[slot(m)] = col.x + @divTrunc(col.w - m.w.width, 2);
     m.arrange();
@@ -186,7 +165,6 @@ pub fn center(cl: *Client) void {
 pub const Placement = struct { cl: *Client, left: i32 };
 
 pub fn placement(m: *Monitor) ?Placement {
-    if (!isScrolling(m)) return null;
     const cl = server.focustop(m) orelse return null;
     const col = columnOf(cl) orelse return null;
     return .{ .cl = cl, .left = col.x - m.scroll[slot(m)] };
@@ -195,7 +173,7 @@ pub fn placement(m: *Monitor) ?Placement {
 /// a window shown in both views stays put instead of taking the new view's scroll
 pub fn keep(m: *Monitor, a: ?Placement) void {
     const an = a orelse return;
-    if (!isScrolling(m) or server.focustop(m) != an.cl) return;
+    if (server.focustop(m) != an.cl) return;
     const col = columnOf(an.cl) orelse return;
     m.scroll[slot(m)] = col.x - an.left;
 }
@@ -231,10 +209,9 @@ pub fn remove(cl: *Client) void {
 pub fn initialSize(cl: *const Client) [2]i32 {
     const m = server.selmon orelse return .{ 0, 0 };
     const rules = cl.matchRules();
-    if ((rules.floating orelse cl.floatType()) or m.layout().arrange == null) return .{ 0, 0 };
+    if (rules.floating orelse cl.floatType()) return .{ 0, 0 };
     if (rules.fullscreen) return .{ m.m.width, m.m.height };
     const bw = 2 * config.borderpx;
-    if (!isScrolling(m)) return .{ m.w.width - bw, m.w.height - bw };
     return .{ columnWidth(cl, m) - bw, m.w.height - bw };
 }
 
@@ -408,7 +385,6 @@ fn focusPoint(m: *Monitor) i32 {
 
 /// move the strip by delta pixels; positive shows more of the right side
 pub fn scrollBy(m: *Monitor, delta: f64) void {
-    if (!isScrolling(m)) return;
     if (drag == null or drag.?.m != m) drag = .{ .m = m, .start = m.scroll[slot(m)], .focus = focusPoint(m) };
     drag.?.travel += delta;
     remainder += delta;
@@ -439,7 +415,7 @@ pub fn snap(m: *Monitor) void {
     remainder = 0;
     const d = drag orelse return;
     drag = null;
-    if (d.m != m or !isScrolling(m)) return;
+    if (d.m != m) return;
     const p = d.focus + @as(i32, @intFromFloat(@round(d.travel)));
     var best: ?Column = null;
     var best_dist: i32 = std.math.maxInt(i32);
