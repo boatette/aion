@@ -771,6 +771,8 @@ pub fn grab(mode: CursorMode) void {
     const cl = hit.client orelse return;
     if (cl.fullscreen or cl.unmanaged()) return;
     grabc = cl;
+    if (!cl.floating) scroll.remove(cl);
+    cl.stacked = false;
     cl.setFloating(true);
     cursor_mode = mode;
     const x: i32 = @intFromFloat(@round(server.cursor.x));
