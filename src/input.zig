@@ -163,6 +163,13 @@ pub fn clientGone(cl: *Client) void {
     }
 }
 
+pub fn monitorGone(m: *Monitor) void {
+    if (swipe) |*sw| if (sw.mon == m) {
+        sw.mon = null;
+    };
+    if (axis_scrolling == m) axis_scrolling = null;
+}
+
 pub fn keyboardEnter(s: *wlr.Surface) void {
     if (server.seat.getKeyboard()) |kb| {
         // Leave out keys a binding took: their release never reaches the

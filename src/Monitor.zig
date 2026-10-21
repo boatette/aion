@@ -65,17 +65,21 @@ fn createInner(output: *wlr.Output) !void {
     state.setTransform(rule.transform);
     if (!output.commitState(&state)) log.err("could not enable output {s}", .{output.name});
 
+    const scene_output = try server.scene.createSceneOutput(output);
+    errdefer scene_output.destroy();
+    const fullscreen_bg = try server.layers.get(.fs).createSceneRect(0, 0, &config.fullscreen_bg);
+    errdefer fullscreen_bg.node.destroy();
     const m = try gpa.create(Monitor);
     errdefer gpa.destroy(m);
     m.* = .{
         .output = output,
-        .scene_output = try server.scene.createSceneOutput(output),
-        .fullscreen_bg = try server.layers.get(.fs).createSceneRect(0, 0, &config.fullscreen_bg),
+        .scene_output = scene_output,
+        .fullscreen_bg = fullscreen_bg,
         .lt = .{ rule.layout, &config.layouts[1] },
     };
-    output.data = m;
     for (&m.layers) |*l| l.init();
     try m.bar.init(m);
+    output.data = m;
     m.fullscreen_bg.node.setEnabled(false);
 
     output.events.frame.add(&m.frame);
@@ -85,10 +89,14 @@ fn createInner(output: *wlr.Output) !void {
     if (server.selmon == null) server.selmon = m;
     input.loadCursorScale(output.scale);
 
-    const lo = if (rule.x < 0 or rule.y < 0)
-        try server.output_layout.addAuto(output)
+    // m is linked now, so a failure leaves it out of the layout instead of freeing it
+    const lo = (if (rule.x < 0 or rule.y < 0)
+        server.output_layout.addAuto(output)
     else
-        try server.output_layout.add(output, rule.x, rule.y);
+        server.output_layout.add(output, rule.x, rule.y)) catch |err| {
+        log.err("could not add output {s} to the layout: {}", .{ output.name, err });
+        return;
+    };
     server.scene_layout.addOutput(lo, m.scene_output);
 }
 
@@ -112,6 +120,7 @@ fn onDestroy(listener: *wl.Listener(*wlr.Output), _: *wlr.Output) void {
         while (lit.next()) |l| l.layer_surface.destroy();
     }
     lock.monitorGone(m);
+    input.monitorGone(m);
     m.frame.link.remove();
     m.destroy.link.remove();
     m.request_state.link.remove();
