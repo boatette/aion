@@ -2,10 +2,7 @@
 
 A dwl-like Wayland compositor with a scrolling layout, written in Zig on wlroots.
 
-Windows sit in columns on an endless horizontal strip, one strip per tag and
-monitor. A column can hold several windows stacked vertically. Everything else
-is dwl: tags, a dwm-style bar, monocle and floating layouts, rules, and a
-config file compiled in.
+Windows sit in columns on an endless horizontal strip, one strip per tag and monitor. A column can hold several windows stacked vertically. Everything else is dwl: tags, a dwm-style bar, monocle and floating layouts, rules, and a config file compiled in.
 
 ## Building
 
@@ -16,8 +13,7 @@ nix develop          # zig, zls and test tools
 zig build            # inside the dev shell
 ```
 
-`aion -s 'cmd'` runs `cmd` once the compositor is up. `aion -d` logs wlroots
-debug output.
+`aion -s 'cmd'` runs `cmd` once the compositor is up. `aion -d` logs wlroots debug output.
 
 ## NixOS
 
@@ -42,52 +38,43 @@ debug output.
 }
 ```
 
-The module adds an `aion` session for display managers, an `aion-session`
-command for starting it from a TTY (`exec aion-session` in a login shell), an
-`aion-session.target` for user services, and the usual Wayland session pieces
-(portals, polkit, Xwayland). The package also takes `enableXWayland` and
-`release` (`fast`, `safe` or `small`).
+The module adds an `aion` session for display managers, an `aion-session` command for starting it from a TTY (`exec aion-session` in a login shell), an `aion-session.target` for user services, and the usual Wayland session pieces (portals, polkit, Xwayland). The package also takes `enableXWayland` and `release` (`fast`, `safe` or `small`).
 
 ## Configuration
 
-Everything lives in `src/config.zig`: colours, font, tags, rules, monitor rules,
-input settings, keys, mouse buttons, wheel bindings and gestures. Copy it,
-change it, and pass it as `configFile`. Nix's `replaceVars` works on it the same
-way it does on a dwl `config.h`.
+Everything lives in `src/config.zig`: colours, font, tags, rules, monitor rules, input settings, keys, mouse buttons, wheel bindings and gestures. Copy it, change it, and pass it as `configFile`. Nix's `replaceVars` works on it the same way it does on a dwl `config.h`.
 
-The default config expects these helpers on `PATH`: `aion-status`, `aion-apps`,
-`aion-power`, `aion-volume`, `aion-brightness`, `aion-screenshot` and
-`aion-caffeine`.
+The default config uses `foot`, `wpctl`, `brightnessctl`, `grim` and `slurp`, and `loginctl` and `systemctl` for the session keys. The launcher lists the programs on `PATH`.
 
-The bar reads one status line at a time from `status_cmd`'s output, or from
-stdin if `status_cmd` is `null`.
+The bar reads one status line at a time from `status_cmd`'s output, or from stdin if `status_cmd` is `null`.
 
 ## Keys
 
-| Keys | Action |
-|---|---|
-| Mod+h/l | focus the column to the left/right |
-| Mod+j/k | focus the window below/above in the column |
-| Mod+Shift+h/l | move the column |
-| Mod+Shift+j/k | move the window within its column |
-| Mod+[ / ] | pull the window into the neighbouring column, or push it out into its own |
-| Mod+r, Mod+Shift+r | cycle column width (1/3, 1/2, 2/3) |
-| Mod+-/= | column width -/+5% |
-| Mod+Shift+-/= | window height in the column -/+10% |
-| Mod+f | toggle a full-width column |
-| Mod+c | centre the column |
-| Mod+Home/End, +Shift | focus or move to the first/last column |
-| Mod+a | monocle |
-| Mod+o, Mod+Shift+o, Mod+Ctrl+o | previous layout, floating, scrolling |
-| Mod+Shift+f | fullscreen |
-| Mod+1..0, +Shift, +Ctrl | view tag; move the window there and follow; move it there and stay |
-| Mod+g | view every tag |
-| Mod+p | pin the window to every tag |
-| Mod+v | toggle floating |
-| Mod+d | launcher in the bar |
-| Mod+x | session keys in the bar |
-| Mod+b | toggle the bar |
-| Mod+q, Mod+Alt+q | close, kill |
+| Keys                           | Action                                                                    |
+| ------------------------------ | ------------------------------------------------------------------------- |
+| Mod+h/l                        | focus the column to the left/right                                        |
+| Mod+j/k                        | focus the window below/above in the column                                |
+| Mod+Shift+h/l                  | move the column                                                           |
+| Mod+Shift+j/k                  | move the window within its column                                         |
+| Mod+[ / ]                      | pull the window into the neighbouring column, or push it out into its own |
+| Mod+r, Mod+Shift+r             | cycle column width (1/3, 1/2, 2/3)                                        |
+| Mod+-/=                        | column width -/+5%                                                        |
+| Mod+Shift+-/=                  | window height in the column -/+10%                                        |
+| Mod+f                          | toggle a full-width column                                                |
+| Mod+c                          | centre the column                                                         |
+| Mod+Home/End, +Shift           | focus or move to the first/last column                                    |
+| Mod+a                          | monocle                                                                   |
+| Mod+o, Mod+Shift+o, Mod+Ctrl+o | previous layout, floating, scrolling                                      |
+| Mod+Shift+f                    | fullscreen                                                                |
+| Mod+1..0, +Shift, +Ctrl        | view tag; move the window there and follow; move it there and stay        |
+| Mod+g                          | view every tag                                                            |
+| Mod+p                          | pin the window to every tag                                               |
+| Mod+v                          | toggle floating                                                           |
+| Mod+Return                     | terminal                                                                  |
+| Mod+d                          | launcher in the bar                                                       |
+| Mod+x                          | session keys in the bar                                                   |
+| Mod+b                          | toggle the bar                                                            |
+| Mod+q, Mod+Alt+q               | close, kill                                                               |
 
 The arrow keys work wherever h/j/k/l do.
 

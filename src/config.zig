@@ -11,44 +11,47 @@ const SHIFT = a.SHIFT;
 const CTRL = a.CTRL;
 const ALT = a.ALT;
 
-// Rosé Pine
-const base = 0x191724ff;
-const overlay = 0x26233aff;
-const muted = 0x6e6a86ff;
-const subtle = 0x908caaff;
-const text = 0xe0def4ff;
-const love = 0xeb6f92ff;
-const rose = 0xebbcbaff;
+const gray1 = 0x222222ff;
+const gray2 = 0x444444ff;
+const gray3 = 0xbbbbbbff;
+const gray4 = 0xeeeeeeff;
+const cyan = 0x005577ff;
+const red = 0xff0000ff;
 
 pub const sloppyfocus = true;
 /// Windows asking for attention get focused (switching tag if needed) instead of marked urgent.
-pub const focus_on_activate = true;
+pub const focus_on_activate = false;
 pub const borderpx = 1;
-pub const rootcolor = a.color(base);
-pub const bordercolor = a.color(muted);
-pub const focuscolor = a.color(rose);
-pub const urgentcolor = a.color(love);
+pub const rootcolor = a.color(gray1);
+pub const bordercolor = a.color(gray2);
+pub const focuscolor = a.color(cyan);
+pub const urgentcolor = a.color(red);
 pub const fullscreen_bg = a.color(0x000000ff);
 
 pub const showbar = true;
-pub const fonts = [_][*:0]const u8{ "JetBrainsMono Nerd Font:size=12", "monospace:size=12" };
-pub const bar_norm: a.Scheme = .{ .fg = subtle, .bg = base };
-pub const bar_sel: a.Scheme = .{ .fg = text, .bg = overlay };
+pub const fonts = [_][*:0]const u8{"monospace:size=10"};
+pub const bar_norm: a.Scheme = .{ .fg = gray3, .bg = gray1 };
+pub const bar_sel: a.Scheme = .{ .fg = gray4, .bg = cyan };
 /// Prints one status line at a time; null reads the status from stdin.
-pub const status_cmd: ?a.Arg = a.cmd(&.{"aion-status"});
+pub const status_cmd: ?a.Arg = null;
 
 /// Mod+d launcher: apps_cmd lists "Name<TAB>path" lines, launch_cmd plus the path starts one.
-pub const apps_cmd = a.cmd(&.{"aion-apps"});
-pub const launch_cmd = [_][:0]const u8{ "aion-apps", "launch" };
+/// By default it lists the programs on PATH.
+pub const apps_cmd = a.cmd(&.{
+    "sh", "-c",
+    \\IFS=:; for d in $PATH; do for f in "$d"/*; do
+    \\[ -f "$f" ] && [ -x "$f" ] && printf '%s\t%s\n' "${f##*/}" "${f##*/}"
+    \\done; done | sort -u
+});
+pub const launch_cmd = [_][:0]const u8{};
 
 /// Mod+x, then one key: session actions. Any other key leaves the mode.
-const power = "aion-power";
 pub const session_keys = [_]a.Key{
-    .{ .mod = 0, .sym = K.l, .func = a.spawn, .arg = a.cmd(&.{ power, "lock" }) },
-    .{ .mod = 0, .sym = K.u, .func = a.spawn, .arg = a.cmd(&.{ power, "suspend" }) },
-    .{ .mod = 0, .sym = K.e, .func = a.spawn, .arg = a.cmd(&.{ power, "logout" }) },
-    .{ .mod = 0, .sym = K.r, .func = a.spawn, .arg = a.cmd(&.{ power, "reboot" }) },
-    .{ .mod = 0, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ power, "shutdown" }) },
+    .{ .mod = 0, .sym = K.l, .func = a.spawn, .arg = a.cmd(&.{ "loginctl", "lock-session" }) },
+    .{ .mod = 0, .sym = K.u, .func = a.spawn, .arg = a.cmd(&.{ "systemctl", "suspend" }) },
+    .{ .mod = 0, .sym = K.e, .func = a.quit },
+    .{ .mod = 0, .sym = K.r, .func = a.spawn, .arg = a.cmd(&.{ "systemctl", "reboot" }) },
+    .{ .mod = 0, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ "systemctl", "poweroff" }) },
 };
 pub const session_hint = "l lock  u suspend  e logout  r reboot  s shutdown";
 
@@ -71,10 +74,7 @@ pub const monrules = [_]a.MonitorRule{
 pub const rules = [_]a.Rule{
     .{ .app_id = "xdg-desktop-portal-gtk", .floating = true },
     .{ .app_id = "org.gtk.FileChooserDialog", .floating = true },
-    .{ .title = "Sign in - Google Accounts", .floating = true },
     .{ .title = "Picture-in-Picture", .floating = true },
-    .{ .app_id = "io.bassi.Amberol", .floating = true },
-    .{ .app_id = "qimgv", .title = "dvp.webp", .tags = ~@as(u32, 0), .floating = true },
 };
 
 pub const xkb_rules: xkb.RuleNames = .{
@@ -82,15 +82,15 @@ pub const xkb_rules: xkb.RuleNames = .{
     .model = null,
     .layout = "us",
     .variant = null,
-    .options = "caps:super",
+    .options = null,
 };
-pub const repeat_rate = 35;
-pub const repeat_delay = 200;
+pub const repeat_rate = 25;
+pub const repeat_delay = 600;
 
 pub const tap_to_click = true;
 pub const tap_and_drag = true;
 pub const drag_lock = true;
-pub const natural_scrolling = true;
+pub const natural_scrolling = false;
 pub const disable_while_typing = true;
 pub const left_handed = false;
 pub const middle_button_emulation = false;
@@ -132,16 +132,9 @@ fn chvt(comptime n: u32) a.Key {
 }
 
 pub const keys = [_]a.Key{
-    .{ .mod = MOD, .sym = K.t, .func = a.spawn, .arg = a.cmd(&.{"foot"}) },
-    .{ .mod = MOD, .sym = K.w, .func = a.spawn, .arg = a.cmd(&.{"qutebrowser"}) },
-    .{ .mod = MOD, .sym = K.e, .func = a.spawn, .arg = a.cmd(&.{"dolphin"}) },
-    .{ .mod = MOD | ALT, .sym = K.e, .func = a.spawn, .arg = a.cmd(&.{ "foot", "zsh", "-ic", "y; exec zsh" }) },
-    .{ .mod = CTRL | SHIFT, .sym = K.Escape, .func = a.spawn, .arg = a.cmd(&.{ "foot", "-e", "btop" }) },
+    .{ .mod = MOD, .sym = K.Return, .func = a.spawn, .arg = a.cmd(&.{"foot"}) },
     .{ .mod = MOD, .sym = K.d, .func = menu.launcher },
-    .{ .mod = MOD | SHIFT, .sym = K.d, .func = a.spawn, .arg = a.cmd(&.{"tofi-drun"}) },
     .{ .mod = MOD, .sym = K.x, .func = menu.session },
-    .{ .mod = MOD | SHIFT, .sym = K.x, .func = a.spawn, .arg = a.cmd(&.{power}) },
-    .{ .mod = MOD, .sym = K.i, .func = a.spawn, .arg = a.cmd(&.{"aion-caffeine"}) },
     .{ .mod = ALT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = 1 } },
     .{ .mod = ALT | SHIFT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = -1 } },
 
@@ -177,17 +170,15 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD, .sym = K.Tab, .func = a.view, .arg = .{ .ui = 0 } },
 
     // These also work while locked.
-    helper(0, K.XF86AudioRaiseVolume, &.{ "aion-volume", "up" }),
-    helper(0, K.XF86AudioLowerVolume, &.{ "aion-volume", "down" }),
-    helper(0, K.XF86AudioMute, &.{ "aion-volume", "mute" }),
-    helper(0, K.XF86AudioMicMute, &.{ "aion-volume", "mic-mute" }),
-    helper(0, K.XF86MonBrightnessUp, &.{ "aion-brightness", "up" }),
-    helper(0, K.XF86MonBrightnessDown, &.{ "aion-brightness", "down" }),
-    helper(ALT, K.XF86MonBrightnessUp, &.{ "aion-brightness", "up", "1" }),
-    helper(ALT, K.XF86MonBrightnessDown, &.{ "aion-brightness", "down", "1" }),
+    helper(0, K.XF86AudioRaiseVolume, &.{ "wpctl", "set-volume", "-l", "1", "@DEFAULT_AUDIO_SINK@", "5%+" }),
+    helper(0, K.XF86AudioLowerVolume, &.{ "wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-" }),
+    helper(0, K.XF86AudioMute, &.{ "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle" }),
+    helper(0, K.XF86AudioMicMute, &.{ "wpctl", "set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle" }),
+    helper(0, K.XF86MonBrightnessUp, &.{ "brightnessctl", "set", "5%+" }),
+    helper(0, K.XF86MonBrightnessDown, &.{ "brightnessctl", "set", "5%-" }),
 
-    .{ .mod = 0, .sym = K.Print, .func = a.spawn, .arg = a.cmd(&.{ "aion-screenshot", "full" }) },
-    .{ .mod = MOD | SHIFT, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ "aion-screenshot", "region" }) },
+    .{ .mod = 0, .sym = K.Print, .func = a.spawn, .arg = a.cmd(&.{"grim"}) },
+    .{ .mod = MOD | SHIFT, .sym = K.s, .func = a.spawn, .arg = a.cmd(&.{ "sh", "-c", "grim -g \"$(slurp)\"" }) },
 
     .{ .mod = CTRL | ALT, .sym = K.BackSpace, .func = a.quit },
 } ++ both(MOD, K.h, K.Left, a.focusdir, .{ .ui = @intFromEnum(a.Dir.left) }) ++
