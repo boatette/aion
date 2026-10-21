@@ -144,7 +144,7 @@ pub const keys = [_]a.Key{
     .{ .mod = MOD, .sym = K.b, .func = a.togglebar },
     .{ .mod = MOD | ALT, .sym = K.q, .func = a.forcekill },
     .{ .mod = MOD, .sym = K.v, .func = a.togglefloating },
-    .{ .mod = MOD, .sym = K.p, .func = a.tag, .arg = .{ .ui = ~@as(u32, 0) } },
+    .{ .mod = MOD, .sym = K.p, .func = a.togglepin },
 
     .{ .mod = MOD, .sym = K.c, .func = a.centercolumn },
     .{ .mod = MOD, .sym = K.f, .func = a.togglefullwidth },

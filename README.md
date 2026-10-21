@@ -69,7 +69,7 @@ The bar reads one status line at a time from `status_cmd`'s output, or from stdi
 | Mod+1..0, +Shift, +Ctrl        | view tag; move the window there and follow; move it there and stay        |
 | Mod+g                          | view every tag                                                            |
 | Mod+Tab                        | go back to the previous tags                                              |
-| Mod+p                          | pin the window to every tag                                               |
+| Mod+p                          | pin the window to every tag, or unpin it                                  |
 | Mod+v                          | toggle floating                                                           |
 | Mod+Return                     | terminal                                                                  |
 | Mod+d                          | launcher in the bar                                                       |

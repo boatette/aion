@@ -219,6 +219,15 @@ pub fn tag(arg: *const Arg) void {
     server.selmon.?.arrange();
 }
 
+pub fn togglepin(_: *const Arg) void {
+    const m = server.selmon orelse return;
+    const sel = server.focustop(m) orelse return;
+    const t = if (sel.tags == tagmask()) @as(u32, 1) << @intCast(@ctz(m.tags())) else tagmask();
+    retag(sel, t);
+    server.focus(server.focustop(m), true);
+    m.arrange();
+}
+
 pub fn toggletag(arg: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     const t = sel.tags ^ (arg.ui & tagmask());
