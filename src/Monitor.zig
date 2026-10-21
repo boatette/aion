@@ -188,14 +188,18 @@ fn applyConfig(cfg: *wlr.OutputConfigurationV1, test_only: bool) void {
     while (it.next()) |head| {
         const output = head.state.output;
         const m = fromOutput(output) orelse continue;
-        m.asleep = false;
         var state = wlr.Output.State.init();
         defer state.finish();
         head.state.apply(&state);
-        ok = ok and if (test_only) output.testState(&state) else output.commitState(&state);
-        if (!test_only) input.loadCursorScale(output.scale);
+        if (test_only) {
+            ok = output.testState(&state) and ok;
+            continue;
+        }
+        ok = output.commitState(&state) and ok;
+        m.asleep = false;
+        input.loadCursorScale(output.scale);
         // Re-adding an output that didn't move would mark it manually placed.
-        if (!test_only and output.enabled and (m.m.x != head.state.x or m.m.y != head.state.y))
+        if (output.enabled and (m.m.x != head.state.x or m.m.y != head.state.y))
             _ = server.output_layout.add(output, head.state.x, head.state.y) catch {};
     }
     if (ok) cfg.sendSucceeded() else cfg.sendFailed();
