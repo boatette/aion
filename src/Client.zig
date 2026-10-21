@@ -499,6 +499,7 @@ fn onUnmap(listener: *wl.Listener(void)) void {
         cl.setMon(null, 0);
         cl.flink.remove();
     }
+    cl.surface().data = null;
     cl.scene.node.destroy();
     input.motionNotify(0, null, 0, 0, 0, 0);
 }

@@ -61,7 +61,7 @@ pub fn checkInhibitors(exclude: ?*wlr.Surface) void {
         const tree: ?*wlr.SceneTree = @ptrCast(@alignCast(root.data));
         var x: c_int = undefined;
         var y: c_int = undefined;
-        if (tree == null or tree.?.node.coords(&x, &y)) {
+        if (tree != null and tree.?.node.coords(&x, &y)) {
             inhibited = true;
             break;
         }
