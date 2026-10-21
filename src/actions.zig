@@ -392,9 +392,9 @@ pub fn focusdir(arg: *const Arg) void {
         .left, .right => if (scroll.neighbour(sel, step, false)) |col| focus(scroll.lastFocused(col)),
         .up, .down => {
             const col = scroll.columnOf(sel) orelse return;
-            var buf: [32]*Client = undefined;
+            var buf: [scroll.max_column]*Client = undefined;
             const ms = scroll.members(col, &buf);
-            const i: i64 = @intCast(std.mem.indexOfScalar(*Client, ms, sel).?);
+            const i: i64 = @intCast(std.mem.indexOfScalar(*Client, ms, sel) orelse return);
             if (i + step >= 0 and i + step < ms.len) focus(ms[@intCast(i + step)]);
         },
     }

@@ -238,7 +238,7 @@ pub fn initialSize(cl: *const Client) [2]i32 {
     return .{ columnWidth(cl, m) - bw, m.w.height - bw };
 }
 
-const max_column = 32;
+pub const max_column = 32;
 
 /// The column's windows in order, top to bottom.
 pub fn members(col: Column, buf: *[max_column]*Client) []*Client {
@@ -307,7 +307,7 @@ pub fn moveWindow(cl: *Client, dir: i32) void {
     const col = columnOf(cl) orelse return;
     var buf: [max_column]*Client = undefined;
     const ms = members(col, &buf);
-    const i = std.mem.indexOfScalar(*Client, ms, cl).?;
+    const i = std.mem.indexOfScalar(*Client, ms, cl) orelse return;
     const j = @as(i64, @intCast(i)) + dir;
     if (j < 0 or j >= ms.len) return;
     const other = ms[@intCast(j)];
@@ -335,6 +335,7 @@ pub fn consumeOrExpel(cl: *Client, dir: i32) void {
         moveAfter(&.{cl}, anchor);
     } else {
         const other = neighbour(cl, dir, false) orelse return;
+        if (members(other, &buf).len >= max_column) return;
         cl.stacked = true;
         moveAfter(&.{cl}, &other.last.link);
     }
