@@ -514,6 +514,11 @@ fn onDestroy(listener: *wl.Listener(void)) void {
             cl.map.link.remove();
             cl.unmap.link.remove();
             cl.request_maximize.link.remove();
+            // the decoration's own destroy fires after this one when a client dies first
+            if (cl.decoration != null) {
+                cl.decoration_mode.link.remove();
+                cl.decoration_destroy.link.remove();
+            }
         },
         .x11 => {
             cl.associate.link.remove();
