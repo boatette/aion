@@ -269,6 +269,7 @@ pub fn focusmon(arg: *const Arg) void {
 pub fn tagmon(arg: *const Arg) void {
     const sel = server.focustop(server.selmon) orelse return;
     const m = server.dirtomon(@enumFromInt(arg.i)) orelse return;
+    if (m == sel.mon) return;
     scroll.remove(sel);
     sel.link.remove();
     server.clients.append(sel);
