@@ -285,16 +285,24 @@ pub fn arrangeLayers(m: *Monitor) void {
     i = m.layers.len;
     while (i > 0) : (i -= 1) m.arrangeLayer(i - 1, &usable, false);
 
+    if (input.locked) return;
     for ([_]usize{ 3, 2 }) |li| {
         var it = m.layers[li].iterator(.forward);
         while (it.next()) |l| {
-            if (input.locked or l.layer_surface.current.keyboard_interactive == .none or !l.mapped) continue;
-            server.focus(null, false);
+            if (l.layer_surface.current.keyboard_interactive != .exclusive or !l.mapped) continue;
+            if (server.seat.keyboard_state.focused_surface != l.layer_surface.surface) {
+                server.focus(null, false);
+                input.keyboardEnter(l.layer_surface.surface);
+            }
             server.exclusive_focus = l;
-            input.keyboardEnter(l.layer_surface.surface);
             return;
         }
     }
+    // the surface holding the keyboard stopped asking for it
+    if (server.exclusive_focus) |l| if (l.mon == m) {
+        server.exclusive_focus = null;
+        server.focus(server.focustop(server.selmon), true);
+    };
 }
 
 fn arrangeLayer(m: *Monitor, i: usize, usable: *wlr.Box, exclusive: bool) void {

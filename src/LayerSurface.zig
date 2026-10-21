@@ -99,6 +99,7 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
     }
 
     if (@as(u32, @bitCast(ls.current.committed)) == 0 and l.mapped == ls.surface.mapped) return;
+    const mapping = ls.surface.mapped and !l.mapped;
     l.mapped = ls.surface.mapped;
 
     const target = sceneLayer(ls.current.layer);
@@ -109,6 +110,13 @@ fn onCommit(listener: *wl.Listener(*wlr.Surface), _: *wlr.Surface) void {
         l.popups.node.reparent(popupLayer(ls.current.layer));
     }
     l.mon.arrangeLayers();
+
+    // like sway, on_demand surfaces above windows get the keyboard once when they appear
+    const above = @intFromEnum(ls.current.layer) >= @intFromEnum(zwlr.LayerShellV1.Layer.top);
+    if (mapping and above and ls.current.keyboard_interactive == .on_demand and !input.locked and server.exclusive_focus == null) {
+        server.focus(null, false);
+        input.keyboardEnter(ls.surface);
+    }
 }
 
 fn onUnmap(listener: *wl.Listener(void)) void {

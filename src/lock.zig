@@ -100,6 +100,7 @@ const Lock = struct {
         if (unlocked) {
             locked_bg.node.setEnabled(false);
             server.focus(server.focustop(server.selmon), false);
+            if (server.exclusive_focus) |e| input.keyboardEnter(e.layer_surface.surface);
             input.motionNotify(0, null, 0, 0, 0, 0);
         }
         l.new_surface.link.remove();

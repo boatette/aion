@@ -203,7 +203,7 @@ pub fn focus(s: *Server, cl: ?*Client, lift: bool) void {
         s.fstack.prepend(new);
         s.selmon = new.mon;
         new.urgent = false;
-        new.setBorderColor(&config.focuscolor);
+        if (s.exclusive_focus == null) new.setBorderColor(&config.focuscolor);
     }
 
     Bar.redraw();
