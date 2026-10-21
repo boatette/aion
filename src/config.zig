@@ -132,7 +132,7 @@ pub const keys = [_]a.Key{
     .{ .mod = ALT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = 1 } },
     .{ .mod = ALT | SHIFT, .sym = K.Tab, .func = a.focusstack, .arg = .{ .i = -1 } },
 
-    .{ .mod = MOD, .sym = K.g, .func = a.view, .arg = .{ .ui = ~@as(u32, 0) } },
+    .{ .mod = MOD, .sym = K.g, .func = a.toggleoverview },
     .{ .mod = MOD, .sym = K.q, .func = a.killclient },
     .{ .mod = MOD, .sym = K.b, .func = a.togglebar },
     .{ .mod = MOD | ALT, .sym = K.q, .func = a.forcekill },

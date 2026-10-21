@@ -183,6 +183,16 @@ pub fn view(arg: *const Arg) void {
     m.arrange();
 }
 
+/// every tag at once, or back to the focused window's tag
+pub fn toggleoverview(_: *const Arg) void {
+    const m = server.selmon orelse return;
+    if (m.tags() != tagmask()) return view(&.{ .ui = tagmask() });
+    const sel = server.focustop(m);
+    // a pinned window is on every tag, so go back to the previous view instead
+    if (sel == null or sel.?.tags == tagmask()) return view(&.{ .ui = 0 });
+    view(&.{ .ui = sel.?.tags & -%sel.?.tags });
+}
+
 pub fn toggleview(arg: *const Arg) void {
     const m = server.selmon orelse return;
     const t = m.tags() ^ (arg.ui & tagmask());
