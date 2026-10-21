@@ -157,11 +157,11 @@ pub fn arrange(m: *Monitor) void {
 
     var buf: [16]u8 = undefined;
     const symbol = if (n == 0)
-        "[S]"
+        ""
     else if (focused == 0)
-        std.fmt.bufPrint(&buf, "[-/{d}]", .{n}) catch "[S]"
+        std.fmt.bufPrint(&buf, "[-/{d}]", .{n}) catch ""
     else
-        std.fmt.bufPrint(&buf, "[{d}/{d}]", .{ focused, n }) catch "[S]";
+        std.fmt.bufPrint(&buf, "[{d}/{d}]", .{ focused, n }) catch "";
     m.setSymbol(symbol);
 }
 

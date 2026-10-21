@@ -352,7 +352,7 @@ fn paint(m: *Monitor, p: *Painter, width: i32) void {
 
     p.scheme = config.bar_norm;
     const symbol = std.mem.sliceTo(&m.ltsymbol, 0);
-    x = p.text(x, p.textw(symbol), @divTrunc(p.pad(), 2), symbol, false);
+    if (symbol.len > 0) x = p.text(x, p.textw(symbol), @divTrunc(p.pad(), 2), symbol, false);
 
     if (selected and menu.draw(p, x, width)) return;
 
@@ -382,7 +382,8 @@ pub fn clickAt(m: *Monitor, lx: f64, tag: *u32) Click {
             return .tagbar;
         }
     }
-    if (x < end + p.textw(std.mem.sliceTo(&m.ltsymbol, 0))) return .ltsymbol;
+    const symbol = std.mem.sliceTo(&m.ltsymbol, 0);
+    if (symbol.len > 0 and x < end + p.textw(symbol)) return .ltsymbol;
     if (m == server.selmon and x > pixelWidth(m) - (p.textWidth(status()) + 2)) return .status;
     return .title;
 }
