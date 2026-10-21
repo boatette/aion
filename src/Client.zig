@@ -155,23 +155,28 @@ pub fn parent(cl: *const Client) ?*Client {
     return @ptrCast(@alignCast(data orelse return null));
 }
 
-extern fn wlr_xwayland_surface_has_window_type(surface: *const wlr.XwaylandSurface, window_type: c_int) bool;
+/// _NET_WM_WINDOW_TYPE values from wlroots' xwayland.h
+const WindowType = enum(c_int) { toolbar = 2, utility = 4, splash = 5, dialog = 6 };
+extern fn wlr_xwayland_surface_has_window_type(surface: *const wlr.XwaylandSurface, window_type: WindowType) bool;
+
+/// a size the client pins with an equal min and max
+fn fixed(min: i32, max: i32) bool {
+    return min > 0 and min == max;
+}
 
 /// Dialogs, fixed-size windows and the like float by default.
 pub fn floatType(cl: *const Client) bool {
     switch (cl.shell) {
         .xdg => |t| {
             const cur = t.current;
-            const sized = cur.min_width > 0 or cur.min_height > 0 or cur.max_width > 0 or cur.max_height > 0;
-            return t.parent != null or (sized and (cur.min_width == cur.max_width or cur.min_height == cur.max_height));
+            return t.parent != null or fixed(cur.min_width, cur.max_width) or fixed(cur.min_height, cur.max_height);
         },
         .x11 => |x| {
             if (!xwayland) unreachable;
             if (x.modal) return true;
-            // toolbar, utility, splash, dialog
-            for ([_]c_int{ 2, 4, 5, 6 }) |t| if (wlr_xwayland_surface_has_window_type(x, t)) return true;
+            for ([_]WindowType{ .toolbar, .utility, .splash, .dialog }) |t| if (wlr_xwayland_surface_has_window_type(x, t)) return true;
             const h = x.size_hints orelse return false;
-            return h.min_width > 0 and h.min_height > 0 and (h.max_width == h.min_width or h.max_height == h.min_height);
+            return fixed(h.min_width, h.max_width) or fixed(h.min_height, h.max_height);
         },
     }
 }
