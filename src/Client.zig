@@ -260,6 +260,12 @@ fn geometryOffset(cl: *const Client) [2]i32 {
     };
 }
 
+/// layout position of the main surface, which starts before the frame when it has csd shadows
+pub fn surfaceOrigin(cl: *const Client) [2]f64 {
+    const off = cl.geometryOffset();
+    return .{ @floatFromInt(cl.geom.x + cl.bw - off[0]), @floatFromInt(cl.geom.y + cl.bw - off[1]) };
+}
+
 /// Place the client at geo (layout coordinates, borders included). Tiled
 /// clients may sit partly off their monitor; that part is clipped away so it
 /// never shows on a neighbouring output.

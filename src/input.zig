@@ -444,12 +444,8 @@ pub fn motionNotify(time: u32, device: ?*wlr.InputDevice, dx_in: f64, dy_in: f64
         if (server.seat.pointer_state.focused_surface) |focused| {
             if (focused != hit.surface) {
                 if (Client.fromSurface(focused)) |cl| {
-                    hit = .{
-                        .surface = focused,
-                        .client = cl,
-                        .sx = cursor.x - @as(f64, @floatFromInt(cl.geom.x + cl.bw)),
-                        .sy = cursor.y - @as(f64, @floatFromInt(cl.geom.y + cl.bw)),
-                    };
+                    const o = cl.surfaceOrigin();
+                    hit = .{ .surface = focused, .client = cl, .sx = cursor.x - o[0], .sy = cursor.y - o[1] };
                 }
             }
         }
@@ -613,8 +609,9 @@ fn constrain(dx: *f64, dy: *f64) bool {
     const con = active_constraint orelse return false;
     if (cursor_mode == .move or cursor_mode == .resize) return false;
     const cl = Client.fromSurface(con.surface) orelse return false;
-    const sx = server.cursor.x - @as(f64, @floatFromInt(cl.geom.x + cl.bw));
-    const sy = server.cursor.y - @as(f64, @floatFromInt(cl.geom.y + cl.bw));
+    const o = cl.surfaceOrigin();
+    const sx = server.cursor.x - o[0];
+    const sy = server.cursor.y - o[1];
     var cx: f64 = undefined;
     var cy: f64 = undefined;
     if (wlr.region.confine(&con.region, sx, sy, sx + dx.*, sy + dy.*, &cx, &cy)) {
@@ -635,7 +632,8 @@ const Constraint = struct {
             if (con.current.cursor_hint.enabled) if (Client.fromSurface(con.surface)) |cl| {
                 const hx = con.current.cursor_hint.x;
                 const hy = con.current.cursor_hint.y;
-                _ = server.cursor.warp(null, hx + @as(f64, @floatFromInt(cl.geom.x + cl.bw)), hy + @as(f64, @floatFromInt(cl.geom.y + cl.bw)));
+                const o = cl.surfaceOrigin();
+                _ = server.cursor.warp(null, hx + o[0], hy + o[1]);
                 server.seat.pointerWarp(hx, hy);
             };
         }
