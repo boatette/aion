@@ -607,9 +607,9 @@ fn onSetHints(listener: *wl.Listener(void)) void {
     const cl: *Client = @fieldParentPtr("set_hints", listener);
     const hints = cl.shell.x11.hints orelse return;
     if (cl == server.focustop(server.selmon)) return;
-    // XUrgencyHint
-    cl.urgent = hints.flags & (1 << 8) != 0;
-    if (cl.urgent) cl.setBorderColor(&config.urgentcolor);
+    const urgency_hint = 1 << 8;
+    cl.urgent = hints.flags & urgency_hint != 0;
+    cl.setBorderColor(if (cl.urgent) &config.urgentcolor else &config.bordercolor);
     @import("Bar.zig").redraw();
 }
 
