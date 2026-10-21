@@ -346,7 +346,9 @@ pub fn arrange(m: *Monitor) void {
     }
 
     const top = server.focustop(m);
-    m.fullscreen_bg.node.setEnabled(m.swipe == null and top != null and top.?.fullscreen);
+    const fs = top != null and top.?.fullscreen;
+    m.fullscreen_bg.node.setEnabled(fs);
+    if (fs) m.fullscreen_bg.node.setPosition(m.m.x, m.m.y + m.swipeShift(top.?.tags));
 
     const lt = m.layout();
 
@@ -361,15 +363,23 @@ pub fn arrange(m: *Monitor) void {
     if (m.swipe) |s| {
         const cur = m.tags();
         m.tagset[m.seltags] = s.tags;
-        m.arrangeShifted(lt, if (s.offset > 0) m.w.height - s.offset else -m.w.height - s.offset);
+        m.arrangeShifted(lt, m.swipeShift(s.tags));
         m.tagset[m.seltags] = cur;
     }
     m.setSymbol(lt.symbol);
-    m.arrangeShifted(lt, if (m.swipe) |s| -s.offset else 0);
+    m.arrangeShifted(lt, m.swipeShift(m.tags()));
     // counts and occupied tags may have changed; the bar skips drawing if nothing did
     Bar.redraw();
     input.motionNotify(0, null, 0, 0, 0, 0);
     lock.checkInhibitors(null);
+}
+
+/// how far a tag swipe moves windows on tags t, the current view winning for shared ones
+pub fn swipeShift(m: *const Monitor, t: u32) i32 {
+    const s = m.swipe orelse return 0;
+    if (t & m.tags() != 0) return -s.offset;
+    if (t & s.tags != 0) return if (s.offset > 0) m.w.height - s.offset else -m.w.height - s.offset;
+    return 0;
 }
 
 fn arrangeShifted(m: *Monitor, lt: *const actions.Layout, shift: i32) void {

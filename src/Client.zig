@@ -289,7 +289,9 @@ pub fn resize(cl: *Client, geo: wlr.Box, interact: bool) void {
     }
 
     const g = cl.geom;
-    cl.scene.node.setPosition(g.x, g.y);
+    // layouts put a swipe in tiled geometry, other windows have to keep it when they commit
+    const shift = if (cl.tiled() and m.layout().arrange != null) 0 else m.swipeShift(cl.tags);
+    cl.scene.node.setPosition(g.x, g.y + shift);
     cl.scene_surface.node.setPosition(bw, bw);
     cl.setSize(g.width - 2 * bw, g.height - 2 * bw);
 
