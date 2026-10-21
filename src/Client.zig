@@ -349,6 +349,8 @@ pub fn setFullscreen(cl: *Client, on: bool) void {
         cl.resize(cl.prev, false);
     }
     m.arrange();
+    // the strip lost this column while fullscreen, so its scroll may no longer show it
+    if (!on) scroll.reveal(cl);
 }
 
 pub fn setFloating(cl: *Client, on: bool) void {
