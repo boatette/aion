@@ -230,7 +230,14 @@ fn publishConfig() void {
     output_manager.setConfiguration(cfg);
 }
 
+var updating = false;
+
 pub fn updateAll() void {
+    // the layout changes made here fire this again; the outer pass sees the result anyway
+    if (updating) return;
+    updating = true;
+    defer updating = false;
+
     var it = server.monitors.iterator(.forward);
     while (it.next()) |m| {
         if (m.output.enabled or m.asleep) continue;
