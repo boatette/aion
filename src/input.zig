@@ -191,9 +191,11 @@ pub fn modifiers() u32 {
     return @bitCast(kb.getModifiers());
 }
 
+/// caps and numlock state never change which binding matches
 fn clean(mods: u32) u32 {
     const caps: u32 = 1 << 1;
-    return mods & ~caps;
+    const numlock: u32 = 1 << 4;
+    return mods & ~(caps | numlock);
 }
 
 fn setKeymap(kb: *wlr.Keyboard) !void {
